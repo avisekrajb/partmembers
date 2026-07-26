@@ -3,10 +3,10 @@ import axios from 'axios';
 // Use the backend API URL
 const API_URL = process.env.REACT_APP_API_URL || 'https://partymembersbackendnew.onrender.com/api';
 
-// Create axios instance
+// Create axios instance with longer timeout for large requests
 const axiosInstance = axios.create({
   baseURL: API_URL,
-  timeout: 120000,
+  timeout: 30000, // Reduced to 30 seconds for better UX
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -33,7 +33,6 @@ axiosInstance.interceptors.response.use(
       const publicPaths = ['/data', '/home', '/', '/request-download'];
       const currentPath = window.location.pathname;
       
-      // Only redirect to login if not on public pages
       if (!publicPaths.includes(currentPath) && !currentPath.startsWith('/district') && !currentPath.startsWith('/download')) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -68,7 +67,6 @@ export const api = {
   },
 
   // ==================== FILES ====================
-  // Public view
   getFiles: async () => {
     try {
       const response = await axiosInstance.get('/files');
@@ -79,13 +77,13 @@ export const api = {
     }
   },
 
-  // Admin only
   uploadFiles: async (formData) => {
     try {
       const response = await axiosInstance.post('/files/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
+        timeout: 120000, // Longer timeout for uploads
       });
       return response.data;
     } catch (error) {
@@ -105,7 +103,6 @@ export const api = {
   },
 
   // ==================== RECORDS ====================
-  // Public view
   getRecordsByFileId: async (fileId) => {
     try {
       const response = await axiosInstance.get(`/records/file/${fileId}`);
@@ -138,7 +135,6 @@ export const api = {
     }
   },
 
-  // Admin only
   updateRecord: async (id, data) => {
     try {
       const response = await axiosInstance.put(`/records/${id}`, data);
@@ -161,18 +157,33 @@ export const api = {
   },
 
   // ==================== DOWNLOAD REQUESTS ====================
-  // Public - Request download
   requestDownload: async (data) => {
     try {
-      const response = await axiosInstance.post('/downloads/request', data);
+      // Validate data before sending
+      if (!data.name || !data.email || !data.phone) {
+        throw new Error('Name, email, and phone are required');
+      }
+      
+      const response = await axiosInstance.post('/downloads/request', data, {
+        timeout: 15000, // 15 seconds for download request
+      });
       return response.data;
     } catch (error) {
       console.error('Request download error:', error);
+      // Provide more specific error messages
+      if (error.code === 'ECONNABORTED') {
+        throw new Error('Request timed out. Please check your connection and try again.');
+      }
+      if (error.response?.status === 404) {
+        throw new Error('Download service not available. Please try again later.');
+      }
+      if (error.response?.status === 400) {
+        throw new Error(error.response?.data?.message || 'Invalid request. Please check your details.');
+      }
       throw error;
     }
   },
 
-  // Public - Check download status
   checkDownloadStatus: async (token) => {
     try {
       const response = await axiosInstance.get(`/downloads/status/${token}`);
@@ -183,11 +194,11 @@ export const api = {
     }
   },
 
-  // Public - Download file with token
   downloadFile: async (token) => {
     try {
       const response = await axiosInstance.get(`/downloads/file/${token}`, {
-        responseType: 'blob'
+        responseType: 'blob',
+        timeout: 60000, // 60 seconds for file download
       });
       return response;
     } catch (error) {
@@ -196,7 +207,6 @@ export const api = {
     }
   },
 
-  // Admin only - Get all download requests
   getDownloadRequests: async () => {
     try {
       const response = await axiosInstance.get('/downloads/requests');
@@ -207,7 +217,6 @@ export const api = {
     }
   },
 
-  // Admin only - Approve download request
   approveDownload: async (id) => {
     try {
       const response = await axiosInstance.post(`/downloads/approve/${id}`);
@@ -218,7 +227,6 @@ export const api = {
     }
   },
 
-  // Admin only - Reject download request
   rejectDownload: async (id, reason) => {
     try {
       const response = await axiosInstance.post(`/downloads/reject/${id}`, { reason });
