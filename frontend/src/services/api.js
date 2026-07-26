@@ -30,10 +30,11 @@ axiosInstance.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      const publicPaths = ['/data', '/home', '/'];
+      const publicPaths = ['/data', '/home', '/', '/request-download'];
       const currentPath = window.location.pathname;
       
-      if (!publicPaths.includes(currentPath) && !currentPath.startsWith('/district')) {
+      // Only redirect to login if not on public pages
+      if (!publicPaths.includes(currentPath) && !currentPath.startsWith('/district') && !currentPath.startsWith('/download')) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         window.location.href = '/login';
@@ -45,7 +46,7 @@ axiosInstance.interceptors.response.use(
 
 // API methods
 export const api = {
-  // Auth
+  // ==================== AUTH ====================
   login: async (email, password) => {
     try {
       const response = await axiosInstance.post('/auth/login', { email, password });
@@ -66,7 +67,8 @@ export const api = {
     }
   },
 
-  // Files - Public view, Admin upload/delete
+  // ==================== FILES ====================
+  // Public view
   getFiles: async () => {
     try {
       const response = await axiosInstance.get('/files');
@@ -77,6 +79,7 @@ export const api = {
     }
   },
 
+  // Admin only
   uploadFiles: async (formData) => {
     try {
       const response = await axiosInstance.post('/files/upload', formData, {
@@ -101,7 +104,8 @@ export const api = {
     }
   },
 
-  // Records - Public view
+  // ==================== RECORDS ====================
+  // Public view
   getRecordsByFileId: async (fileId) => {
     try {
       const response = await axiosInstance.get(`/records/file/${fileId}`);
@@ -134,7 +138,7 @@ export const api = {
     }
   },
 
-  // Records - Admin only
+  // Admin only
   updateRecord: async (id, data) => {
     try {
       const response = await axiosInstance.put(`/records/${id}`, data);
@@ -152,6 +156,75 @@ export const api = {
       return response.data;
     } catch (error) {
       console.error('Export error:', error);
+      throw error;
+    }
+  },
+
+  // ==================== DOWNLOAD REQUESTS ====================
+  // Public - Request download
+  requestDownload: async (data) => {
+    try {
+      const response = await axiosInstance.post('/downloads/request', data);
+      return response.data;
+    } catch (error) {
+      console.error('Request download error:', error);
+      throw error;
+    }
+  },
+
+  // Public - Check download status
+  checkDownloadStatus: async (token) => {
+    try {
+      const response = await axiosInstance.get(`/downloads/status/${token}`);
+      return response.data;
+    } catch (error) {
+      console.error('Check download status error:', error);
+      throw error;
+    }
+  },
+
+  // Public - Download file with token
+  downloadFile: async (token) => {
+    try {
+      const response = await axiosInstance.get(`/downloads/file/${token}`, {
+        responseType: 'blob'
+      });
+      return response;
+    } catch (error) {
+      console.error('Download file error:', error);
+      throw error;
+    }
+  },
+
+  // Admin only - Get all download requests
+  getDownloadRequests: async () => {
+    try {
+      const response = await axiosInstance.get('/downloads/requests');
+      return response.data;
+    } catch (error) {
+      console.error('Get download requests error:', error);
+      throw error;
+    }
+  },
+
+  // Admin only - Approve download request
+  approveDownload: async (id) => {
+    try {
+      const response = await axiosInstance.post(`/downloads/approve/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error('Approve download error:', error);
+      throw error;
+    }
+  },
+
+  // Admin only - Reject download request
+  rejectDownload: async (id, reason) => {
+    try {
+      const response = await axiosInstance.post(`/downloads/reject/${id}`, { reason });
+      return response.data;
+    } catch (error) {
+      console.error('Reject download error:', error);
       throw error;
     }
   },
