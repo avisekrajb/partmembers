@@ -420,7 +420,7 @@ function Home() {
         </div>
       )}
 
-      {/* District Modal - NO EXPORT/EXPORT BUTTONS */}
+      {/* District Modal - NO EXPORT XLSX BUTTON */}
       {isModalOpen && selectedDistrict && (
         <>
           <style>{`
