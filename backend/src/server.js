@@ -11,7 +11,7 @@ const { createInitialAdmin } = require('./controllers/authController');
 
 const app = express();
 
-// CORS configuration - Allow all origins for Render deployment
+// CORS configuration
 const corsOptions = {
   origin: [
     'https://partymembersall.onrender.com',
@@ -28,11 +28,9 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-
-// Also handle preflight requests explicitly
 app.options('*', cors(corsOptions));
 
-// Security middleware - Helmet needs to be configured to allow CORS
+// Security middleware
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
   crossOriginOpenerPolicy: { policy: "unsafe-none" }
@@ -86,15 +84,12 @@ mongoose.connect(process.env.MONGODB_URI, {
 })
 .then(async () => {
   console.log('✅ Connected to MongoDB Atlas');
-  
-  // Create initial admin user
   await createInitialAdmin();
   
   const PORT = process.env.PORT || 8080;
   app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📍 API URL: http://localhost:${PORT}/api`);
-    console.log(`🌐 CORS enabled for: ${corsOptions.origin.join(', ')}`);
   });
 })
 .catch(err => {
