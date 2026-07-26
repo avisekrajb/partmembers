@@ -1,5 +1,6 @@
 import axios from 'axios';
 
+// Use the backend API URL
 const API_URL = process.env.REACT_APP_API_URL || 'https://partymembersbackendnew.onrender.com/api';
 
 // Create axios instance
@@ -24,7 +25,7 @@ axiosInstance.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Handle auth errors - only redirect if not on public pages
+// Handle auth errors
 axiosInstance.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -32,7 +33,6 @@ axiosInstance.interceptors.response.use(
       const publicPaths = ['/data', '/home', '/'];
       const currentPath = window.location.pathname;
       
-      // Only redirect to login if not on public pages
       if (!publicPaths.includes(currentPath) && !currentPath.startsWith('/district')) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -101,7 +101,7 @@ export const api = {
     }
   },
 
-  // Records - Public view, Admin edit
+  // Records - Public view
   getRecordsByFileId: async (fileId) => {
     try {
       const response = await axiosInstance.get(`/records/file/${fileId}`);
