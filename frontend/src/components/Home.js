@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { 
   Database, 
   LayoutDashboard, 
@@ -20,7 +20,6 @@ import InfinityLoader from './InfinityLoader';
 import DataTable from './DataTable';
 import DownloadRequest from './DownloadRequest';
 import { api } from '../services/api';
-import * as XLSX from 'xlsx';
 
 // District name normalization mapping
 const DISTRICT_NORMALIZATION = {
@@ -58,7 +57,6 @@ const DISTRICT_NORMALIZATION = {
 };
 
 function Home() {
-  const navigate = useNavigate();
   const [stats, setStats] = useState({
     total: 0,
     complete: 0,
@@ -75,7 +73,6 @@ function Home() {
   const [selectedDistrict, setSelectedDistrict] = useState(null);
   const [districtRecords, setDistrictRecords] = useState([]);
   const [modalSearch, setModalSearch] = useState('');
-  const [exporting, setExporting] = useState(false);
   const [showDownloadRequest, setShowDownloadRequest] = useState(false);
 
   const normalizeDistrict = (name) => {
@@ -218,43 +215,6 @@ function Home() {
 
   const handleOpenDownloadRequest = () => {
     setShowDownloadRequest(!showDownloadRequest);
-  };
-
-  const handleExport = async () => {
-    if (districtRecords.length === 0) {
-      toast.warning('No data to export');
-      return;
-    }
-
-    setExporting(true);
-    try {
-      const exportData = districtRecords.map(record => ({
-        'SN': record.sn,
-        'नाम, थर': record.name || '',
-        'प्रदेश': record.province || '',
-        'जिल्ला': record.district || '',
-        'गाउँपालिका/नगरपालिका': record.municipality || '',
-        'वडा नं.': record.ward || '',
-        'मतदाता नम्बर': record.voterNumber || '',
-        'नागरिकता नम्बर': record.citizenshipNumber || '',
-        'नागरिकता जारी भएको मिति र जिल्ला': record.citizenshipIssueDetails || '',
-        'बाबु/आमाको नाम': record.fatherMotherName || '',
-        'पति/पत्नीको नाम': record.spouseName || ''
-      }));
-
-      const ws = XLSX.utils.json_to_sheet(exportData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'District Records');
-      
-      const filename = `${selectedDistrict.name}_records_${new Date().toISOString().split('T')[0]}.xlsx`;
-      XLSX.writeFile(wb, filename);
-      toast.success(`Exported ${districtRecords.length} records successfully`);
-    } catch (error) {
-      console.error('Export error:', error);
-      toast.error('Failed to export data');
-    } finally {
-      setExporting(false);
-    }
   };
 
   const getFilteredModalRecords = () => {
@@ -460,7 +420,7 @@ function Home() {
         </div>
       )}
 
-      {/* District Modal */}
+      {/* District Modal - NO EXPORT/EXPORT BUTTONS */}
       {isModalOpen && selectedDistrict && (
         <>
           <style>{`
@@ -586,6 +546,26 @@ function Home() {
               flex-shrink: 0;
             }
 
+            .np-modal__request-btn {
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              padding: 6px 14px;
+              border: none;
+              border-radius: 8px;
+              background: var(--sky, #3FB6E8);
+              color: #fff;
+              font-weight: 600;
+              font-size: 0.8rem;
+              cursor: pointer;
+              transition: all 0.2s ease;
+            }
+
+            .np-modal__request-btn:hover {
+              transform: scale(1.05);
+              box-shadow: 0 2px 12px rgba(63, 182, 232, 0.3);
+            }
+
             .np-modal__close-btn {
               background: var(--paper-soft, #FBF9F6);
               border: none;
@@ -643,6 +623,28 @@ function Home() {
               border: none;
               border-radius: 0;
             }
+
+            .np-modal__download-hint {
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              padding: 10px 16px;
+              background: #FEF3C7;
+              border-radius: 8px;
+              margin-top: 12px;
+              font-size: 0.85rem;
+              color: #92400E;
+            }
+
+            .np-modal__download-hint a {
+              color: var(--sky, #3FB6E8);
+              font-weight: 600;
+              text-decoration: none;
+            }
+
+            .np-modal__download-hint a:hover {
+              text-decoration: underline;
+            }
           `}</style>
 
           <div className="np-modal-overlay" onClick={closeModal}>
@@ -655,19 +657,11 @@ function Home() {
                 </div>
                 <div className="np-modal__actions">
                   <button 
-                    className="np-btn np-btn--sky np-btn--sm"
+                    className="np-modal__request-btn"
                     onClick={handleOpenDownloadRequest}
                   >
                     <Download size={16} />
-                    Request
-                  </button>
-                  <button 
-                    className="np-btn np-btn--sky np-btn--sm"
-                    onClick={handleExport}
-                    disabled={exporting || districtRecords.length === 0}
-                  >
-                    {exporting ? <span className="np-spinning">⟳</span> : <Download size={16} />}
-                    Export
+                    Request Download
                   </button>
                   <button className="np-modal__close-btn" onClick={closeModal}>
                     <X size={20} />
@@ -677,7 +671,10 @@ function Home() {
 
               <div className="np-modal__body">
                 {showDownloadRequest ? (
-                  <DownloadRequest fileId={selectedDistrict._id} />
+                  <DownloadRequest 
+                    fileId={selectedDistrict._id} 
+                    onClose={() => setShowDownloadRequest(false)}
+                  />
                 ) : (
                   <>
                     <div className="np-modal-search">
@@ -712,12 +709,20 @@ function Home() {
                         {modalSearch && <p className="np-muted">No results for "{modalSearch}"</p>}
                       </div>
                     ) : (
-                      <div className="np-modal-table-wrap">
-                        <DataTable 
-                          records={filteredModalRecords} 
-                          showMissing={true}
-                        />
-                      </div>
+                      <>
+                        <div className="np-modal-table-wrap">
+                          <DataTable 
+                            records={filteredModalRecords} 
+                            showMissing={true}
+                          />
+                        </div>
+                        <div className="np-modal__download-hint">
+                          <Shield size={16} />
+                          <span>
+                            To download this data, please <Link to="/request-download">Request Download</Link> or click the "Request Download" button above.
+                          </span>
+                        </div>
+                      </>
                     )}
                   </>
                 )}
