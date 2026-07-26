@@ -14,8 +14,17 @@ import {
   Users,
   FileText,
   AlertTriangle,
-  Shield
+  Shield,
+  Download,
+  Clock,
+  User,
+  Mail,
+  Phone,
+  CheckCircle,
+  XCircle,
+  RefreshCw
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import DataTable from './DataTable';
 import InfinityLoader from './InfinityLoader';
@@ -33,19 +42,30 @@ function Dashboard() {
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [status, setStatus] = useState(null);
+  const [activeTab, setActiveTab] = useState('files');
+  const [downloadRequests, setDownloadRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [processingRequest, setProcessingRequest] = useState(null);
   const [stats, setStats] = useState({
     totalFiles: 0,
     totalRecords: 0,
     totalComplete: 0,
     totalMissingCitizenship: 0,
-    totalMissingVoterNumber: 0
+    totalMissingVoterNumber: 0,
+    pendingRequests: 0,
+    approvedRequests: 0,
+    rejectedRequests: 0,
+    downloadedRequests: 0
   });
   const folderInputRef = useRef(null);
 
   // Fetch files on mount
   useEffect(() => {
     fetchFiles();
-  }, []);
+    if (isAuthenticated) {
+      fetchDownloadRequests();
+    }
+  }, [isAuthenticated]);
 
   const fetchFiles = async () => {
     try {
@@ -99,13 +119,14 @@ function Dashboard() {
         });
       }
       
-      setStats({
+      setStats(prev => ({
+        ...prev,
         totalFiles: response.length,
         totalRecords,
         totalComplete,
         totalMissingCitizenship,
         totalMissingVoterNumber
-      });
+      }));
       
     } catch (error) {
       console.error('Error fetching files:', error);
@@ -113,6 +134,34 @@ function Dashboard() {
       setFiles([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchDownloadRequests = async () => {
+    try {
+      setLoadingRequests(true);
+      const response = await api.getDownloadRequests();
+      setDownloadRequests(response || []);
+      
+      // Update stats
+      const pending = response.filter(r => r.status === 'pending').length;
+      const approved = response.filter(r => r.status === 'approved').length;
+      const rejected = response.filter(r => r.status === 'rejected').length;
+      const downloaded = response.filter(r => r.status === 'downloaded').length;
+      
+      setStats(prev => ({
+        ...prev,
+        pendingRequests: pending,
+        approvedRequests: approved,
+        rejectedRequests: rejected,
+        downloadedRequests: downloaded
+      }));
+      
+    } catch (error) {
+      console.error('Error fetching download requests:', error);
+      toast.error('Failed to load download requests');
+    } finally {
+      setLoadingRequests(false);
     }
   };
 
@@ -255,7 +304,56 @@ function Dashboard() {
     }
   };
 
+  const handleApproveRequest = async (id) => {
+    setProcessingRequest(id);
+    try {
+      await api.approveDownload(id);
+      toast.success('Download request approved! User has been notified.');
+      await fetchDownloadRequests();
+    } catch (error) {
+      console.error('Error approving request:', error);
+      toast.error('Failed to approve request');
+    } finally {
+      setProcessingRequest(null);
+    }
+  };
+
+  const handleRejectRequest = async (id) => {
+    const reason = prompt('Enter reason for rejection (optional):');
+    setProcessingRequest(id);
+    try {
+      await api.rejectDownload(id, reason || 'Not specified');
+      toast.success('Download request rejected');
+      await fetchDownloadRequests();
+    } catch (error) {
+      console.error('Error rejecting request:', error);
+      toast.error('Failed to reject request');
+    } finally {
+      setProcessingRequest(null);
+    }
+  };
+
+  const handleRefreshRequests = () => {
+    fetchDownloadRequests();
+    toast.info('Refreshed download requests');
+  };
+
   const displayRecords = searchResults.length > 0 ? searchResults : viewingRecords;
+
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'pending':
+        return <span className="np-badge np-badge--pending"><Clock size={12} /> Pending</span>;
+      case 'approved':
+        return <span className="np-badge np-badge--approved"><CheckCircle size={12} /> Approved</span>;
+      case 'rejected':
+        return <span className="np-badge np-badge--rejected"><XCircle size={12} /> Rejected</span>;
+      case 'downloaded':
+        return <span className="np-badge np-badge--downloaded"><Download size={12} /> Downloaded</span>;
+      default:
+        return <span className="np-badge">{status}</span>;
+    }
+  };
 
   if (loading) {
     return (
@@ -373,86 +471,218 @@ function Dashboard() {
         </div>
       )}
 
-      {/* File list */}
-      <h3 className="np-subhead">Uploaded spreadsheets</h3>
-
-      {files.length === 0 ? (
-        <div className="np-empty">
-          <FileSpreadsheet size={28} />
-          <p>Nothing uploaded yet. {isAuthenticated ? 'Choose a folder above to get started.' : 'Login to upload files.'}</p>
-        </div>
-      ) : (
-        <div className="np-filelist">
-          {files.map((file) => (
-            <div className="np-filerow" key={file.id || file._id}>
-              <FileSpreadsheet size={20} className="np-filerow__icon" />
-              <div className="np-filerow__meta">
-                <span className="np-filerow__name">{file.name}</span>
-                <span className="np-muted">
-                  {file.rowCount || 0} records · 
-                  added {file.uploadDate ? new Date(file.uploadDate).toLocaleDateString() : 'recently'}
-                </span>
-              </div>
-              <button 
-                className="np-btn np-btn--sky np-btn--sm" 
-                onClick={() => handleView(file._id || file.id)}
-              >
-                <Eye size={15} /> 
-                {viewingFileId === (file._id || file.id) ? 'Hide' : 'View'}
-              </button>
-              {isAuthenticated && (
-                <button 
-                  className="np-btn np-btn--outline-red np-btn--sm" 
-                  onClick={() => handleDelete(file._id || file.id)}
-                >
-                  <Trash2 size={15} />
-                </button>
-              )}
-            </div>
-          ))}
+      {/* Tabs */}
+      {isAuthenticated && (
+        <div className="np-tabs">
+          <button 
+            className={`np-tab ${activeTab === 'files' ? 'np-tab--active' : ''}`}
+            onClick={() => setActiveTab('files')}
+          >
+            <FileSpreadsheet size={16} />
+            Files
+          </button>
+          <button 
+            className={`np-tab ${activeTab === 'requests' ? 'np-tab--active' : ''}`}
+            onClick={() => setActiveTab('requests')}
+          >
+            <Download size={16} />
+            Download Requests
+            {stats.pendingRequests > 0 && (
+              <span className="np-tab-badge">{stats.pendingRequests}</span>
+            )}
+          </button>
         </div>
       )}
 
-      {/* View panel */}
-      {viewingFileId && (
-        <div className="np-view-panel">
-          <div className="np-view-panel__header">
-            <h3 className="np-subhead">Records Preview</h3>
-            
-            <form onSubmit={handleSearchInView} className="np-search-form np-search-form--inline">
-              <div className="np-search-input-wrapper">
-                <Search size={16} className="np-search-icon" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search in these records (English/Nepali)"
-                  className="np-search-input np-search-input--small"
-                />
-                {searchTerm && (
-                  <button type="button" onClick={clearSearch} className="np-search-clear">
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-              <button type="submit" className="np-btn np-btn--red np-btn--sm" disabled={isSearching}>
-                {isSearching ? <Loader size={14} className="np-spinning" /> : <Search size={14} />}
-                Search
-              </button>
-            </form>
-          </div>
+      {/* Files Tab */}
+      {activeTab === 'files' && (
+        <>
+          <h3 className="np-subhead">Uploaded spreadsheets</h3>
 
-          {searchResults.length > 0 && (
-            <div className="np-search-info">
-              Found <strong>{searchResults.length}</strong> records matching "<strong>{searchTerm}</strong>"
+          {files.length === 0 ? (
+            <div className="np-empty">
+              <FileSpreadsheet size={28} />
+              <p>Nothing uploaded yet. {isAuthenticated ? 'Choose a folder above to get started.' : 'Login to upload files.'}</p>
+            </div>
+          ) : (
+            <div className="np-filelist">
+              {files.map((file) => (
+                <div className="np-filerow" key={file.id || file._id}>
+                  <FileSpreadsheet size={20} className="np-filerow__icon" />
+                  <div className="np-filerow__meta">
+                    <span className="np-filerow__name">{file.name}</span>
+                    <span className="np-muted">
+                      {file.rowCount || 0} records · 
+                      added {file.uploadDate ? new Date(file.uploadDate).toLocaleDateString() : 'recently'}
+                    </span>
+                  </div>
+                  <button 
+                    className="np-btn np-btn--sky np-btn--sm" 
+                    onClick={() => handleView(file._id || file.id)}
+                  >
+                    <Eye size={15} /> 
+                    {viewingFileId === (file._id || file.id) ? 'Hide' : 'View'}
+                  </button>
+                  {isAuthenticated && (
+                    <button 
+                      className="np-btn np-btn--outline-red np-btn--sm" 
+                      onClick={() => handleDelete(file._id || file.id)}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
           )}
 
-          <DataTable records={displayRecords} showMissing={true} />
-          
-          {displayRecords.length === 0 && searchTerm && (
+          {/* View panel */}
+          {viewingFileId && (
+            <div className="np-view-panel">
+              <div className="np-view-panel__header">
+                <h3 className="np-subhead">Records Preview</h3>
+                
+                <form onSubmit={handleSearchInView} className="np-search-form np-search-form--inline">
+                  <div className="np-search-input-wrapper">
+                    <Search size={16} className="np-search-icon" />
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Search in these records (English/Nepali)"
+                      className="np-search-input np-search-input--small"
+                    />
+                    {searchTerm && (
+                      <button type="button" onClick={clearSearch} className="np-search-clear">
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                  <button type="submit" className="np-btn np-btn--red np-btn--sm" disabled={isSearching}>
+                    {isSearching ? <Loader size={14} className="np-spinning" /> : <Search size={14} />}
+                    Search
+                  </button>
+                </form>
+              </div>
+
+              {searchResults.length > 0 && (
+                <div className="np-search-info">
+                  Found <strong>{searchResults.length}</strong> records matching "<strong>{searchTerm}</strong>"
+                </div>
+              )}
+
+              <DataTable records={displayRecords} showMissing={true} />
+              
+              {displayRecords.length === 0 && searchTerm && (
+                <div className="np-empty">
+                  <p>No records found matching "<strong>{searchTerm}</strong>"</p>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Download Requests Tab */}
+      {activeTab === 'requests' && isAuthenticated && (
+        <div className="np-requests-section">
+          <div className="np-requests-section__header">
+            <h3 className="np-subhead">Download Requests</h3>
+            <div className="np-requests-section__actions">
+              <span className="np-requests-stats">
+                <span className="np-requests-stat np-requests-stat--pending">
+                  {stats.pendingRequests} Pending
+                </span>
+                <span className="np-requests-stat np-requests-stat--approved">
+                  {stats.approvedRequests} Approved
+                </span>
+                <span className="np-requests-stat np-requests-stat--downloaded">
+                  {stats.downloadedRequests} Downloaded
+                </span>
+                <span className="np-requests-stat np-requests-stat--rejected">
+                  {stats.rejectedRequests} Rejected
+                </span>
+              </span>
+              <button 
+                className="np-btn np-btn--ghost np-btn--sm"
+                onClick={handleRefreshRequests}
+                disabled={loadingRequests}
+              >
+                <RefreshCw size={14} className={loadingRequests ? 'np-spinning' : ''} />
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          {loadingRequests ? (
+            <InfinityLoader size={30} color="#8B5CF6" text="Loading requests..." />
+          ) : downloadRequests.length === 0 ? (
             <div className="np-empty">
-              <p>No records found matching "<strong>{searchTerm}</strong>"</p>
+              <Download size={28} />
+              <p>No download requests yet.</p>
+              <p className="np-muted">Users will appear here when they request data downloads.</p>
+            </div>
+          ) : (
+            <div className="np-requests-list">
+              {downloadRequests.map((request) => (
+                <div key={request._id} className="np-request-item">
+                  <div className="np-request-item__info">
+                    <div className="np-request-item__user">
+                      <User size={16} />
+                      <strong>{request.name}</strong>
+                    </div>
+                    <div className="np-request-item__details">
+                      <span><Mail size={14} /> {request.email}</span>
+                      <span><Phone size={14} /> {request.phone}</span>
+                      <span className="np-request-item__date">
+                        {new Date(request.requestDate).toLocaleDateString()}
+                      </span>
+                      {request.fileId && (
+                        <span className="np-request-item__file">
+                          <FileSpreadsheet size={14} /> {request.fileId.name || 'File'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="np-request-item__status">
+                    {getStatusBadge(request.status)}
+                  </div>
+
+                  {request.status === 'pending' && (
+                    <div className="np-request-item__actions">
+                      <button 
+                        className="np-btn np-btn--red np-btn--sm"
+                        onClick={() => handleApproveRequest(request._id)}
+                        disabled={processingRequest === request._id}
+                      >
+                        {processingRequest === request._id ? 'Processing...' : 'Approve'}
+                      </button>
+                      <button 
+                        className="np-btn np-btn--ghost np-btn--sm"
+                        onClick={() => handleRejectRequest(request._id)}
+                        disabled={processingRequest === request._id}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  )}
+
+                  {request.status === 'approved' && request.downloadToken && (
+                    <div className="np-request-item__token">
+                      <span className="np-muted">Token: </span>
+                      <code>{request.downloadToken.substring(0, 16)}...</code>
+                    </div>
+                  )}
+
+                  {request.status === 'rejected' && request.reason && (
+                    <div className="np-request-item__reason">
+                      <span className="np-muted">Reason: </span>
+                      <span>{request.reason}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
