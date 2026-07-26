@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { 
   Database, 
   LayoutDashboard, 
@@ -13,11 +13,12 @@ import {
   X,
   Download,
   Search,
-  ChevronDown
+  Shield
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import InfinityLoader from './InfinityLoader';
 import DataTable from './DataTable';
+import DownloadRequest from './DownloadRequest';
 import { api } from '../services/api';
 import * as XLSX from 'xlsx';
 
@@ -57,6 +58,7 @@ const DISTRICT_NORMALIZATION = {
 };
 
 function Home() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
     total: 0,
     complete: 0,
@@ -72,9 +74,9 @@ function Home() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedDistrict, setSelectedDistrict] = useState(null);
   const [districtRecords, setDistrictRecords] = useState([]);
-  const [modalLoading, setModalLoading] = useState(false);
   const [modalSearch, setModalSearch] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [showDownloadRequest, setShowDownloadRequest] = useState(false);
 
   const normalizeDistrict = (name) => {
     if (!name || name.trim() === '') return null;
@@ -179,7 +181,7 @@ function Home() {
         setError(null);
       } catch (err) {
         console.error('Error fetching stats:', err);
-        setError('Failed to load statistics');
+        setError('Failed to load statistics. Please check your connection.');
         setStats({
           total: 0,
           complete: 0,
@@ -201,6 +203,7 @@ function Home() {
     setDistrictRecords(district.records || []);
     setModalSearch('');
     setIsModalOpen(true);
+    setShowDownloadRequest(false);
     document.body.style.overflow = 'hidden';
   };
 
@@ -209,19 +212,13 @@ function Home() {
     setSelectedDistrict(null);
     setDistrictRecords([]);
     setModalSearch('');
+    setShowDownloadRequest(false);
     document.body.style.overflow = 'auto';
   };
 
-  // Close modal on Escape key
-  useEffect(() => {
-    const handleEsc = (e) => {
-      if (e.key === 'Escape' && isModalOpen) {
-        closeModal();
-      }
-    };
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
-  }, [isModalOpen]);
+  const handleOpenDownloadRequest = () => {
+    setShowDownloadRequest(!showDownloadRequest);
+  };
 
   const handleExport = async () => {
     if (districtRecords.length === 0) {
@@ -273,6 +270,16 @@ function Home() {
 
   const filteredModalRecords = getFilteredModalRecords();
 
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === 'Escape' && isModalOpen) {
+        closeModal();
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [isModalOpen]);
+
   if (loading) {
     return (
       <div className="np-page">
@@ -304,6 +311,9 @@ function Home() {
           </Link>
           <Link to="/dashboard" className="np-btn np-btn--ghost">
             <LayoutDashboard size={18} /> Admin Dashboard
+          </Link>
+          <Link to="/request-download" className="np-btn np-btn--sky">
+            <Download size={18} /> Request Download
           </Link>
         </div>
       </section>
@@ -450,11 +460,10 @@ function Home() {
         </div>
       )}
 
-      {/* Modern Modal - Bottom Sheet for Mobile, Centered for Desktop */}
+      {/* District Modal */}
       {isModalOpen && selectedDistrict && (
         <>
           <style>{`
-            /* Modern Modal Styles */
             .np-modal-overlay {
               position: fixed;
               top: 0;
@@ -463,7 +472,6 @@ function Home() {
               bottom: 0;
               background: rgba(0, 0, 0, 0.5);
               backdrop-filter: blur(8px);
-              -webkit-backdrop-filter: blur(8px);
               display: flex;
               align-items: flex-end;
               justify-content: center;
@@ -489,50 +497,44 @@ function Home() {
               animation: slideUp 0.4s cubic-bezier(0.22, 1, 0.36, 1);
               cursor: default;
               box-shadow: 0 -20px 60px rgba(0, 0, 0, 0.15);
-              position: relative;
             }
 
             @keyframes slideUp {
-              from { 
-                transform: translateY(100%);
-                opacity: 0;
+              from { transform: translateY(100%); opacity: 0; }
+              to { transform: translateY(0); opacity: 1; }
+            }
+
+            @media (min-width: 768px) {
+              .np-modal-overlay {
+                align-items: center;
+                padding: 20px;
               }
-              to { 
-                transform: translateY(0);
-                opacity: 1;
+              .np-modal {
+                border-radius: 24px;
+                max-height: 90vh;
+                animation: modalZoomIn 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+              }
+              @keyframes modalZoomIn {
+                from { transform: scale(0.9); opacity: 0; }
+                to { transform: scale(1); opacity: 1; }
               }
             }
 
-            /* Drag Handle */
-            .np-modal__drag-handle {
-              display: none;
-              justify-content: center;
-              padding: 8px 0 4px;
-              cursor: grab;
-              user-select: none;
-            }
-
-            .np-modal__drag-handle:active {
-              cursor: grabbing;
-            }
-
-            .np-modal__drag-handle-line {
-              width: 40px;
-              height: 4px;
-              background: var(--line, #ECE6DD);
-              border-radius: 2px;
-              transition: background 0.2s ease;
-            }
-
-            .np-modal__drag-handle:hover .np-modal__drag-handle-line {
-              background: var(--muted, #7A6F63);
+            @media (max-width: 767px) {
+              .np-modal-overlay {
+                align-items: flex-end;
+              }
+              .np-modal {
+                border-radius: 24px 24px 0 0;
+                max-height: 92vh;
+              }
             }
 
             .np-modal__header {
               display: flex;
               align-items: center;
               justify-content: space-between;
-              padding: 16px 24px 12px;
+              padding: 16px 24px;
               border-bottom: 1px solid var(--line, #ECE6DD);
               position: sticky;
               top: 0;
@@ -540,16 +542,16 @@ function Home() {
               border-radius: 24px 24px 0 0;
               z-index: 10;
               flex-shrink: 0;
-              gap: 12px;
               flex-wrap: wrap;
+              gap: 10px;
             }
 
             .np-modal__title-group {
               display: flex;
               align-items: center;
               gap: 12px;
-              min-width: 0;
               flex: 1;
+              min-width: 0;
             }
 
             .np-modal__icon {
@@ -575,7 +577,6 @@ function Home() {
               font-size: 0.7rem;
               font-weight: 600;
               flex-shrink: 0;
-              white-space: nowrap;
             }
 
             .np-modal__actions {
@@ -642,188 +643,10 @@ function Home() {
               border: none;
               border-radius: 0;
             }
-
-            .np-modal-table-wrap .np-table thead th {
-              position: sticky;
-              top: 0;
-              z-index: 5;
-            }
-
-            .np-empty {
-              padding: 40px 20px;
-            }
-
-            /* Desktop Styles */
-            @media (min-width: 768px) {
-              .np-modal-overlay {
-                align-items: center;
-                padding: 20px;
-              }
-
-              .np-modal {
-                border-radius: 24px;
-                max-height: 90vh;
-                animation: modalZoomIn 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-              }
-
-              @keyframes modalZoomIn {
-                from { 
-                  transform: scale(0.9);
-                  opacity: 0;
-                }
-                to { 
-                  transform: scale(1);
-                  opacity: 1;
-                }
-              }
-
-              .np-modal__drag-handle {
-                display: none !important;
-              }
-
-              .np-modal__header {
-                border-radius: 24px 24px 0 0;
-                padding: 20px 28px 16px;
-              }
-
-              .np-modal__body {
-                padding: 20px 28px 28px;
-              }
-
-              .np-modal__close-btn {
-                width: 40px;
-                height: 40px;
-              }
-            }
-
-            /* Mobile Styles - Bottom Sheet */
-            @media (max-width: 767px) {
-              .np-modal-overlay {
-                align-items: flex-end;
-              }
-
-              .np-modal {
-                border-radius: 24px 24px 0 0;
-                max-height: 92vh;
-                animation: slideUp 0.4s cubic-bezier(0.22, 1, 0.36, 1);
-              }
-
-              .np-modal__drag-handle {
-                display: flex;
-              }
-
-              .np-modal__header {
-                padding: 12px 16px 10px;
-                border-radius: 24px 24px 0 0;
-              }
-
-              .np-modal__title {
-                font-size: 1.1rem;
-              }
-
-              .np-modal__body {
-                padding: 12px 16px 20px;
-              }
-
-              .np-modal__close-btn {
-                width: 32px;
-                height: 32px;
-                padding: 6px;
-              }
-
-              .np-modal__close-btn svg {
-                width: 18px;
-                height: 18px;
-              }
-
-              .np-modal-search {
-                flex-direction: column;
-                align-items: stretch;
-                gap: 8px;
-              }
-
-              .np-modal-search .np-search-input-wrapper {
-                min-width: unset;
-                width: 100%;
-              }
-
-              .np-modal-search-count {
-                text-align: right;
-                font-size: 0.75rem;
-              }
-
-              .np-modal-table-wrap {
-                max-height: 50vh;
-              }
-
-              /* Add safe area padding for notched phones */
-              @supports (padding-bottom: env(safe-area-inset-bottom)) {
-                .np-modal {
-                  padding-bottom: env(safe-area-inset-bottom);
-                }
-              }
-            }
-
-            @media (max-width: 480px) {
-              .np-modal__title-group {
-                gap: 8px;
-              }
-
-              .np-modal__title {
-                font-size: 1rem;
-              }
-
-              .np-modal__badge {
-                font-size: 0.6rem;
-                padding: 1px 8px;
-              }
-
-              .np-modal__header {
-                padding: 10px 12px 8px;
-              }
-
-              .np-modal__body {
-                padding: 10px 12px 16px;
-              }
-
-              .np-modal-table-wrap {
-                max-height: 40vh;
-              }
-
-              .np-modal__actions .np-btn {
-                font-size: 0.75rem;
-                padding: 6px 10px;
-              }
-            }
-
-            /* Scrollbar Styling */
-            .np-modal__body::-webkit-scrollbar {
-              width: 4px;
-            }
-
-            .np-modal__body::-webkit-scrollbar-track {
-              background: var(--paper-soft, #FBF9F6);
-              border-radius: 2px;
-            }
-
-            .np-modal__body::-webkit-scrollbar-thumb {
-              background: var(--line, #ECE6DD);
-              border-radius: 2px;
-            }
-
-            .np-modal__body::-webkit-scrollbar-thumb:hover {
-              background: var(--muted, #7A6F63);
-            }
           `}</style>
 
           <div className="np-modal-overlay" onClick={closeModal}>
             <div className="np-modal" onClick={(e) => e.stopPropagation()}>
-              {/* Drag Handle - Mobile Only */}
-              <div className="np-modal__drag-handle">
-                <div className="np-modal__drag-handle-line" />
-              </div>
-
-              {/* Header */}
               <div className="np-modal__header">
                 <div className="np-modal__title-group">
                   <MapPin size={24} className="np-modal__icon" />
@@ -833,11 +656,18 @@ function Home() {
                 <div className="np-modal__actions">
                   <button 
                     className="np-btn np-btn--sky np-btn--sm"
+                    onClick={handleOpenDownloadRequest}
+                  >
+                    <Download size={16} />
+                    Request
+                  </button>
+                  <button 
+                    className="np-btn np-btn--sky np-btn--sm"
                     onClick={handleExport}
                     disabled={exporting || districtRecords.length === 0}
                   >
                     {exporting ? <span className="np-spinning">⟳</span> : <Download size={16} />}
-                    <span className="np-modal__btn-text">Export</span>
+                    Export
                   </button>
                   <button className="np-modal__close-btn" onClick={closeModal}>
                     <X size={20} />
@@ -845,48 +675,51 @@ function Home() {
                 </div>
               </div>
 
-              {/* Body */}
               <div className="np-modal__body">
-                {/* Search */}
-                <div className="np-modal-search">
-                  <div className="np-search-input-wrapper">
-                    <Search size={16} className="np-search-icon" />
-                    <input
-                      type="text"
-                      value={modalSearch}
-                      onChange={(e) => setModalSearch(e.target.value)}
-                      placeholder="Search within this district..."
-                      className="np-search-input np-search-input--small"
-                    />
-                    {modalSearch && (
-                      <button 
-                        type="button" 
-                        onClick={() => setModalSearch('')} 
-                        className="np-search-clear"
-                      >
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
-                  <span className="np-modal-search-count">
-                    {filteredModalRecords.length} records
-                  </span>
-                </div>
-
-                {/* Table */}
-                {filteredModalRecords.length === 0 ? (
-                  <div className="np-empty">
-                    <FileText size={28} />
-                    <p>No records found in this district.</p>
-                    {modalSearch && <p className="np-muted">No results for "{modalSearch}"</p>}
-                  </div>
+                {showDownloadRequest ? (
+                  <DownloadRequest fileId={selectedDistrict._id} />
                 ) : (
-                  <div className="np-modal-table-wrap">
-                    <DataTable 
-                      records={filteredModalRecords} 
-                      showMissing={true}
-                    />
-                  </div>
+                  <>
+                    <div className="np-modal-search">
+                      <div className="np-search-input-wrapper">
+                        <Search size={16} className="np-search-icon" />
+                        <input
+                          type="text"
+                          value={modalSearch}
+                          onChange={(e) => setModalSearch(e.target.value)}
+                          placeholder="Search within this district..."
+                          className="np-search-input np-search-input--small"
+                        />
+                        {modalSearch && (
+                          <button 
+                            type="button" 
+                            onClick={() => setModalSearch('')} 
+                            className="np-search-clear"
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
+                      <span className="np-modal-search-count">
+                        {filteredModalRecords.length} records
+                      </span>
+                    </div>
+
+                    {filteredModalRecords.length === 0 ? (
+                      <div className="np-empty">
+                        <FileText size={28} />
+                        <p>No records found in this district.</p>
+                        {modalSearch && <p className="np-muted">No results for "{modalSearch}"</p>}
+                      </div>
+                    ) : (
+                      <div className="np-modal-table-wrap">
+                        <DataTable 
+                          records={filteredModalRecords} 
+                          showMissing={true}
+                        />
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
