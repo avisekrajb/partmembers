@@ -10,6 +10,9 @@ import Login from './components/Login';
 import ProtectedRoute from './components/ProtectedRoute';
 import ScrollButtons from './components/ScrollButtons';
 import DistrictPage from './components/DistrictPage';
+import DownloadPage from './components/DownloadPage';
+import DownloadRequest from './components/DownloadRequest';
+import AdminDownloadRequests from './components/AdminDownloadRequests';
 import './App.css';
 
 function App() {
@@ -43,10 +46,17 @@ function AppContent() {
 
       <main className="np-main">
         <Routes>
+          {/* Public Routes */}
           <Route path="/" element={<Home />} />
           <Route path="/home" element={<Home />} />
           <Route path="/data" element={<AllData />} />
           <Route path="/district/:districtName" element={<DistrictPage />} />
+          
+          {/* Download Routes */}
+          <Route path="/request-download" element={<DownloadRequest />} />
+          <Route path="/download/:token" element={<DownloadPage />} />
+          
+          {/* Admin Routes */}
           <Route 
             path="/dashboard" 
             element={
@@ -56,9 +66,21 @@ function AppContent() {
             } 
           />
           <Route 
+            path="/admin/downloads" 
+            element={
+              <ProtectedRoute>
+                <AdminDownloadRequests />
+              </ProtectedRoute>
+            } 
+          />
+          
+          {/* Auth Routes */}
+          <Route 
             path="/login" 
             element={<Login />} 
           />
+          
+          {/* 404 Catch-all */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
