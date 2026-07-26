@@ -5,16 +5,298 @@ const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 const XLSX = require('xlsx');
 
-// Email transporter setup
-const transporter = nodemailer.createTransport({
-  service: process.env.EMAIL_SERVICE || 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD
-  }
-});
+// ==================== EMAIL TRANSPORTER SETUP ====================
 
-// ==================== PUBLIC ROUTES ====================
+let transporter;
+
+const createTransporter = () => {
+  try {
+    // Check if email credentials exist
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+      console.log('⚠️ Email credentials not configured. Email features will be disabled.');
+      return null;
+    }
+
+    // For Gmail
+    if (process.env.EMAIL_SERVICE === 'gmail' || process.env.EMAIL_SERVICE === 'Gmail') {
+      transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASSWORD
+        },
+        tls: {
+          rejectUnauthorized: false
+        },
+        connectionTimeout: 30000,
+        greetingTimeout: 30000,
+        socketTimeout: 30000
+      });
+    } else {
+      // For other email services
+      transporter = nodemailer.createTransport({
+        host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+        port: parseInt(process.env.EMAIL_PORT) || 587,
+        secure: process.env.EMAIL_SECURE === 'true',
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASSWORD
+        },
+        tls: {
+          rejectUnauthorized: false
+        },
+        connectionTimeout: 30000,
+        greetingTimeout: 30000,
+        socketTimeout: 30000
+      });
+    }
+    
+    console.log('✅ Email transporter configured successfully');
+    return transporter;
+  } catch (error) {
+    console.error('❌ Email transporter configuration error:', error);
+    return null;
+  }
+};
+
+// Initialize transporter
+createTransporter();
+
+// ==================== EMAIL HELPER FUNCTIONS ====================
+
+const verifyEmailConfig = () => {
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+    console.log('⚠️ Email credentials not configured');
+    return false;
+  }
+  if (!process.env.ADMIN_EMAIL) {
+    console.log('⚠️ Admin email not configured');
+    return false;
+  }
+  return true;
+};
+
+const sendEmailWithRetry = async (mailOptions, maxRetries = 3) => {
+  let lastError;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      if (!transporter) {
+        transporter = createTransporter();
+        if (!transporter) {
+          throw new Error('Transporter not available');
+        }
+      }
+      
+      // Verify transporter
+      await transporter.verify();
+      
+      const info = await transporter.sendMail(mailOptions);
+      console.log(`✅ Email sent successfully (attempt ${attempt}):`, info.messageId);
+      return info;
+      
+    } catch (error) {
+      lastError = error;
+      console.error(`❌ Email send failed (attempt ${attempt}/${maxRetries}):`, error.message);
+      
+      // Wait before retry (exponential backoff)
+      if (attempt < maxRetries) {
+        const waitTime = Math.pow(2, attempt) * 1000;
+        console.log(`⏳ Waiting ${waitTime}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+    }
+  }
+  
+  throw lastError;
+};
+
+// ==================== EMAIL SENDING FUNCTIONS ====================
+
+// Send admin notification
+const sendAdminNotification = async (request) => {
+  try {
+    if (!verifyEmailConfig()) {
+      console.log('⚠️ Email config missing, skipping admin notification');
+      return;
+    }
+
+    const adminEmail = process.env.ADMIN_EMAIL;
+    const frontendUrl = process.env.FRONTEND_URL || 'https://partymembersall.onrender.com';
+    
+    // Check if transporter is available
+    if (!transporter) {
+      transporter = createTransporter();
+      if (!transporter) {
+        console.log('⚠️ Cannot send email: transporter not available');
+        return;
+      }
+    }
+    
+    const mailOptions = {
+      from: `"Zero Infinity - Party Members" <${process.env.EMAIL_USER}>`,
+      to: adminEmail,
+      subject: '📥 New Download Request - Zero Infinity',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px; background: #ffffff;">
+          <h2 style="color: #E63946; margin-top: 0;">New Download Request</h2>
+          <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 16px 0;">
+            <p><strong>👤 Name:</strong> ${request.name}</p>
+            <p><strong>📧 Email:</strong> ${request.email}</p>
+            <p><strong>📱 Phone:</strong> ${request.phone}</p>
+            <p><strong>🆔 Request ID:</strong> ${request._id}</p>
+            <p><strong>📅 Date:</strong> ${new Date(request.requestDate).toLocaleString()}</p>
+            <p><strong>🌐 IP Address:</strong> ${request.ipAddress || 'Unknown'}</p>
+          </div>
+          <div style="margin-top: 20px; text-align: center;">
+            <a href="${frontendUrl}/admin/downloads" 
+               style="background: #E63946; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+              View All Requests
+            </a>
+          </div>
+          <hr style="margin: 20px 0; border: none; border-top: 1px solid #e0e0e0;">
+          <p style="color: #6c757d; font-size: 12px; text-align: center;">
+            <em>This is an automated message from Zero Infinity - Party Members</em>
+          </p>
+        </div>
+      `
+    };
+
+    await sendEmailWithRetry(mailOptions);
+    console.log('✅ Admin notification sent to:', adminEmail);
+    
+  } catch (error) {
+    console.error('❌ Admin notification error:', error.message);
+    // Don't throw - admin notification failure shouldn't break the flow
+  }
+};
+
+// Send approval email to user
+const sendApprovalEmail = async (request) => {
+  try {
+    if (!verifyEmailConfig()) {
+      console.log('⚠️ Email config missing, skipping approval email');
+      return;
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || 'https://partymembersall.onrender.com';
+    const downloadUrl = `${frontendUrl}/download/${request.downloadToken}`;
+    
+    // Check if transporter is available
+    if (!transporter) {
+      transporter = createTransporter();
+      if (!transporter) {
+        console.log('⚠️ Cannot send email: transporter not available');
+        return;
+      }
+    }
+    
+    const mailOptions = {
+      from: `"Zero Infinity - Party Members" <${process.env.EMAIL_USER}>`,
+      to: request.email,
+      subject: '✅ Download Request Approved - Zero Infinity',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px; background: #ffffff;">
+          <h2 style="color: #22C55E; margin-top: 0;">✅ Download Request Approved</h2>
+          <p>Dear <strong>${request.name}</strong>,</p>
+          <p>Your request to download voter records has been <strong>approved</strong> by the administrator.</p>
+          <div style="background: #f0fdf4; padding: 24px; border-radius: 8px; text-align: center; margin: 16px 0; border: 2px solid #22C55E;">
+            <h3 style="margin-top: 0;">📥 Download Link</h3>
+            <a href="${downloadUrl}" 
+               style="background: #22C55E; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; display: inline-block; font-size: 16px; font-weight: bold;">
+              Click here to download
+            </a>
+            <p style="font-size: 12px; color: #6c757d; margin-top: 8px;">
+              ⏱️ Link expires after one download
+            </p>
+          </div>
+          <div style="background: #FEF3C7; padding: 16px; border-radius: 8px; margin: 16px 0;">
+            <h4 style="color: #92400E; margin-top: 0;">⚠️ Important Security Notice</h4>
+            <ul style="color: #92400E; padding-left: 20px;">
+              <li>This link is valid for <strong>one-time use</strong> only</li>
+              <li>The file contains a <strong>Zero Infinity watermark</strong> - DO NOT SHARE</li>
+              <li>Keep the data <strong>safe and confidential</strong></li>
+              <li>Unauthorized distribution is <strong>prohibited</strong></li>
+            </ul>
+          </div>
+          <p>🔒 The file is protected with <strong>Zero Infinity Watermark v1.0</strong></p>
+          <hr style="margin: 20px 0; border: none; border-top: 1px solid #e0e0e0;">
+          <p style="color: #6c757d; font-size: 12px; text-align: center;">
+            <em>If you did not request this download, please ignore this email.</em><br>
+            <em>This is an automated message from Zero Infinity - Party Members</em>
+          </p>
+        </div>
+      `
+    };
+
+    await sendEmailWithRetry(mailOptions);
+    console.log('✅ Approval email sent to:', request.email);
+    
+  } catch (error) {
+    console.error('❌ Approval email error:', error.message);
+    // Don't throw - email failure shouldn't break the flow
+  }
+};
+
+// Send rejection email to user
+const sendRejectionEmail = async (request, reason) => {
+  try {
+    if (!verifyEmailConfig()) {
+      console.log('⚠️ Email config missing, skipping rejection email');
+      return;
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || 'https://partymembersall.onrender.com';
+    
+    // Check if transporter is available
+    if (!transporter) {
+      transporter = createTransporter();
+      if (!transporter) {
+        console.log('⚠️ Cannot send email: transporter not available');
+        return;
+      }
+    }
+    
+    const mailOptions = {
+      from: `"Zero Infinity - Party Members" <${process.env.EMAIL_USER}>`,
+      to: request.email,
+      subject: '❌ Download Request Rejected - Zero Infinity',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px; background: #ffffff;">
+          <h2 style="color: #DC2626; margin-top: 0;">❌ Download Request Rejected</h2>
+          <p>Dear <strong>${request.name}</strong>,</p>
+          <p>Your request to download voter records has been <strong>rejected</strong> by the administrator.</p>
+          ${reason ? `
+            <div style="background: #FEE2E2; padding: 16px; border-radius: 8px; margin: 16px 0;">
+              <h4 style="color: #991B1B; margin-top: 0;">Reason for rejection:</h4>
+              <p style="color: #991B1B; margin: 0;">${reason}</p>
+            </div>
+          ` : ''}
+          <p>If you believe this is a mistake, please contact the administrator.</p>
+          <div style="margin-top: 20px; text-align: center;">
+            <a href="${frontendUrl}/request-download" 
+               style="background: #E63946; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+              Request Again
+            </a>
+          </div>
+          <hr style="margin: 20px 0; border: none; border-top: 1px solid #e0e0e0;">
+          <p style="color: #6c757d; font-size: 12px; text-align: center;">
+            <em>This is an automated message from Zero Infinity - Party Members</em>
+          </p>
+        </div>
+      `
+    };
+
+    await sendEmailWithRetry(mailOptions);
+    console.log('✅ Rejection email sent to:', request.email);
+    
+  } catch (error) {
+    console.error('❌ Rejection email error:', error.message);
+    // Don't throw - email failure shouldn't break the flow
+  }
+};
+
+// ==================== CONTROLLER FUNCTIONS ====================
 
 // Request download - User submits request
 const requestDownload = async (req, res) => {
@@ -66,7 +348,8 @@ const requestDownload = async (req, res) => {
       fileId: fileId || null,
       downloadToken,
       ipAddress: req.ip || req.connection?.remoteAddress || 'Unknown',
-      userAgent: req.headers['user-agent'] || 'Unknown'
+      userAgent: req.headers['user-agent'] || 'Unknown',
+      status: 'pending'
     });
 
     await downloadRequest.save();
@@ -191,7 +474,7 @@ const downloadFile = async (req, res) => {
       }
     }
 
-    // Add watermark as hidden text in header
+    // Add column widths
     ws['!cols'] = [
       { wch: 8 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, 
       { wch: 25 }, { wch: 12 }, { wch: 18 }, { wch: 18 },
@@ -200,7 +483,7 @@ const downloadFile = async (req, res) => {
 
     XLSX.utils.book_append_sheet(workbook, ws, 'Voter Records');
 
-    // Add a watermark sheet with Zero Infinity branding
+    // Add watermark sheet with Zero Infinity branding
     const watermarkSheet = XLSX.utils.aoa_to_sheet([
       ['🔒 ZERO INFINITY WATERMARK 🔒'],
       [''],
@@ -338,137 +621,48 @@ const rejectDownload = async (req, res) => {
   }
 };
 
-// ==================== EMAIL HELPERS ====================
-
-// Send admin notification
-const sendAdminNotification = async (request) => {
+// Test email configuration
+const testEmailConfig = async () => {
   try {
-    const adminEmail = process.env.ADMIN_EMAIL || 'a@gmail.com';
+    if (!verifyEmailConfig()) {
+      return { success: false, message: 'Email credentials not configured' };
+    }
     
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: adminEmail,
-      subject: '📥 New Download Request - Zero Infinity',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #E63946;">New Download Request</h2>
-          <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
-            <p><strong>Name:</strong> ${request.name}</p>
-            <p><strong>Email:</strong> ${request.email}</p>
-            <p><strong>Phone:</strong> ${request.phone}</p>
-            <p><strong>Request ID:</strong> ${request._id}</p>
-            <p><strong>Date:</strong> ${new Date(request.requestDate).toLocaleString()}</p>
-            <p><strong>IP Address:</strong> ${request.ipAddress}</p>
-            <p><strong>User Agent:</strong> ${request.userAgent}</p>
-          </div>
-          <div style="margin-top: 20px;">
-            <a href="${process.env.FRONTEND_URL || 'https://partymembersall.onrender.com'}/admin/downloads" 
-               style="background: #E63946; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
-              View All Requests
-            </a>
-          </div>
-          <hr style="margin: 20px 0;">
-          <p style="color: #6c757d; font-size: 12px;">
-            <em>This is an automated message from Zero Infinity - Party Members</em>
-          </p>
-        </div>
-      `
-    };
-
-    await transporter.sendMail(mailOptions);
-    console.log('✅ Admin notification sent');
-  } catch (error) {
-    console.error('Admin notification error:', error);
-  }
-};
-
-// Send approval email to user
-const sendApprovalEmail = async (request) => {
-  try {
-    const downloadUrl = `${process.env.FRONTEND_URL || 'https://partymembersall.onrender.com'}/download/${request.downloadToken}`;
+    if (!transporter) {
+      transporter = createTransporter();
+      if (!transporter) {
+        return { success: false, message: 'Transporter not available' };
+      }
+    }
     
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: request.email,
-      subject: '✅ Download Request Approved - Zero Infinity',
+    await transporter.verify();
+    
+    // Send test email to admin
+    const testMailOptions = {
+      from: `"Zero Infinity - Party Members" <${process.env.EMAIL_USER}>`,
+      to: process.env.ADMIN_EMAIL,
+      subject: '✅ Email Test - Zero Infinity',
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #22C55E;">Your Download Request Has Been Approved</h2>
-          <p>Dear <strong>${request.name}</strong>,</p>
-          <p>Your request to download voter records has been approved by the administrator.</p>
-          <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center;">
-            <h3>Download Link</h3>
-            <a href="${downloadUrl}" 
-               style="background: #22C55E; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; display: inline-block; font-size: 16px; font-weight: bold;">
-              Click here to download
-            </a>
-            <p style="font-size: 12px; color: #6c757d; margin-top: 8px;">
-              Link expires after one download
-            </p>
-          </div>
-          <div style="margin-top: 20px; background: #FEF3C7; padding: 16px; border-radius: 8px;">
-            <h4 style="color: #92400E;">⚠️ Important:</h4>
-            <ul style="color: #92400E;">
-              <li>This link is valid for <strong>one-time use</strong> only</li>
-              <li>The file contains a <strong>Zero Infinity watermark</strong> - DO NOT SHARE</li>
-              <li>Keep the data <strong>safe and confidential</strong></li>
-              <li>Unauthorized distribution is <strong>prohibited</strong></li>
-            </ul>
-          </div>
-          <p style="margin-top: 16px;">🔒 The file is protected with <strong>Zero Infinity Watermark v1.0</strong></p>
-          <hr style="margin: 20px 0;">
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px; background: #ffffff;">
+          <h2 style="color: #22C55E; margin-top: 0;">✅ Email Configuration Test</h2>
+          <p>This is a test email to confirm that the email configuration is working properly.</p>
+          <p><strong>Time:</strong> ${new Date().toISOString()}</p>
+          <p><strong>Environment:</strong> ${process.env.NODE_ENV || 'development'}</p>
+          <hr>
           <p style="color: #6c757d; font-size: 12px;">
-            <em>If you did not request this download, please ignore this email.</em><br>
-            <em>This is an automated message from Zero Infinity - Party Members</em>
+            <em>Zero Infinity - Party Members</em>
           </p>
         </div>
       `
     };
-
-    await transporter.sendMail(mailOptions);
-    console.log('✅ Approval email sent to', request.email);
+    
+    await transporter.sendMail(testMailOptions);
+    console.log('✅ Test email sent successfully');
+    return { success: true, message: 'Email test successful' };
+    
   } catch (error) {
-    console.error('Approval email error:', error);
-  }
-};
-
-// Send rejection email to user
-const sendRejectionEmail = async (request, reason) => {
-  try {
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: request.email,
-      subject: '❌ Download Request Rejected - Zero Infinity',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #DC2626;">Download Request Rejected</h2>
-          <p>Dear <strong>${request.name}</strong>,</p>
-          <p>Your request to download voter records has been rejected by the administrator.</p>
-          ${reason ? `
-            <div style="background: #FEE2E2; padding: 16px; border-radius: 8px;">
-              <h4 style="color: #991B1B;">Reason for rejection:</h4>
-              <p style="color: #991B1B;">${reason}</p>
-            </div>
-          ` : ''}
-          <p>If you believe this is a mistake, please contact the administrator.</p>
-          <div style="margin-top: 20px;">
-            <a href="${process.env.FRONTEND_URL || 'https://partymembersall.onrender.com'}/request-download" 
-               style="background: #E63946; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
-              Request Again
-            </a>
-          </div>
-          <hr style="margin: 20px 0;">
-          <p style="color: #6c757d; font-size: 12px;">
-            <em>This is an automated message from Zero Infinity - Party Members</em>
-          </p>
-        </div>
-      `
-    };
-
-    await transporter.sendMail(mailOptions);
-    console.log('✅ Rejection email sent to', request.email);
-  } catch (error) {
-    console.error('Rejection email error:', error);
+    console.error('❌ Email test failed:', error.message);
+    return { success: false, message: error.message };
   }
 };
 
@@ -478,5 +672,6 @@ module.exports = {
   downloadFile,
   getDownloadRequests,
   approveDownload,
-  rejectDownload
+  rejectDownload,
+  testEmailConfig
 };
