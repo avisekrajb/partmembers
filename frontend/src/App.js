@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -13,18 +13,54 @@ import DistrictPage from './components/DistrictPage';
 import DownloadPage from './components/DownloadPage';
 import DownloadRequest from './components/DownloadRequest';
 import AdminDownloadRequests from './components/AdminDownloadRequests';
+import PasswordModal from './components/PasswordModal';
 import './App.css';
 
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(true);
+
+  useEffect(() => {
+    // Check if already authenticated in this session
+    const authStatus = sessionStorage.getItem('websiteAuthenticated');
+    if (authStatus === 'true') {
+      setIsAuthenticated(true);
+      setShowPasswordModal(false);
+    }
+
+    // Listen for auth success event
+    const handleAuthSuccess = () => {
+      setIsAuthenticated(true);
+      setShowPasswordModal(false);
+    };
+
+    window.addEventListener('authSuccess', handleAuthSuccess);
+
+    return () => {
+      window.removeEventListener('authSuccess', handleAuthSuccess);
+    };
+  }, []);
+
+  // Only show password modal if not authenticated
+  const shouldShowPasswordModal = !isAuthenticated && showPasswordModal;
+
   return (
     <BrowserRouter>
-      <AppContent />
+      {/* Password Modal - Shows on top of everything */}
+      {shouldShowPasswordModal && <PasswordModal />}
+      
+      <AppContent isAuthenticated={isAuthenticated} />
     </BrowserRouter>
   );
 }
 
-function AppContent() {
+function AppContent({ isAuthenticated }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // If password not entered, show nothing (modal is covering everything)
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <div className="np-root">
