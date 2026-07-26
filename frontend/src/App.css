@@ -1876,3 +1876,200 @@
     max-height: 300px;
   }
 }
+
+
+
+
+/* Download Request */
+.np-download-request {
+  background: var(--paper-soft);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.np-download-request__header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.np-download-request__header svg {
+  color: var(--sky);
+}
+
+.np-download-request__header h3 {
+  font-family: var(--font-display);
+  margin: 8px 0 4px;
+}
+
+.np-download-request__form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.np-download-request__note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+.np-download-success {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.np-download-success__icon {
+  color: #22C55E;
+  margin-bottom: 16px;
+}
+
+/* Admin Download Requests */
+.np-admin-downloads__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.np-requests-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.np-request-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--paper-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.np-request-item__info {
+  flex: 1;
+  min-width: 200px;
+}
+
+.np-request-item__user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.np-request-item__details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.np-request-item__details span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.np-request-item__status {
+  flex-shrink: 0;
+}
+
+.np-request-item__actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.np-request-item__token {
+  font-size: 0.75rem;
+  color: var(--muted);
+  width: 100%;
+}
+
+/* Badges */
+.np-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.np-badge--pending {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.np-badge--approved {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
+.np-badge--rejected {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+.np-badge--downloaded {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
+/* Download Page */
+.np-download-page__container {
+  max-width: 500px;
+  margin: 0 auto;
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.np-download-page__ready,
+.np-download-page__pending,
+.np-download-page__invalid,
+.np-download-page__rejected,
+.np-download-page__checking {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.np-download-page__note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.np-text-green { color: #22C55E; }
+.np-text-red { color: #DC2626; }
+.np-text-yellow { color: #EAB308; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .np-request-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .np-request-item__actions {
+    justify-content: stretch;
+  }
+  
+  .np-request-item__actions .np-btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
