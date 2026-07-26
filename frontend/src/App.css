@@ -2162,3 +2162,225 @@
     justify-content: center;
   }
 }
+
+
+
+
+/* Download Request Styles */
+.np-download-request {
+  background: var(--paper-soft, #FBF9F6);
+  border: 1px solid var(--line, #ECE6DD);
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.np-download-request__header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.np-download-request__icon-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  background: #E8F4FD;
+  border-radius: 50%;
+  margin-bottom: 12px;
+  color: var(--sky, #3FB6E8);
+}
+
+.np-download-request__header h3 {
+  font-family: var(--font-display, 'Baloo 2');
+  font-size: 1.3rem;
+  margin: 0 0 4px;
+}
+
+.np-download-request__security {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--muted, #7A6F63);
+  background: var(--paper, #fff);
+  padding: 4px 14px;
+  border-radius: 20px;
+  margin-top: 8px;
+  border: 1px solid var(--line, #ECE6DD);
+}
+
+.np-download-request__form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.np-field__required {
+  color: #DC2626;
+  margin-left: 2px;
+}
+
+.np-field__error {
+  border-color: #DC2626 !important;
+  background: #FEF2F2 !important;
+}
+
+.np-download-request__footer {
+  margin-top: 8px;
+}
+
+.np-download-request__note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--muted, #7A6F63);
+  padding: 8px 12px;
+  background: var(--paper, #fff);
+  border-radius: 8px;
+  border: 1px solid var(--line, #ECE6DD);
+}
+
+.np-download-request__note svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.np-download-request__features {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  font-size: 0.7rem;
+  color: var(--muted, #7A6F63);
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+/* Download Success */
+.np-download-success {
+  text-align: center;
+  padding: 20px 0;
+}
+
+.np-download-success__icon-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  background: #D1FAE5;
+  border-radius: 50%;
+  margin-bottom: 12px;
+}
+
+.np-download-success__icon {
+  color: #22C55E;
+}
+
+.np-download-success h3 {
+  font-family: var(--font-display, 'Baloo 2');
+  font-size: 1.3rem;
+  margin: 0 0 4px;
+}
+
+.np-download-success__info {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--muted, #7A6F63);
+  padding: 6px 16px;
+  background: var(--paper-soft, #FBF9F6);
+  border-radius: 8px;
+  margin: 8px 0 16px;
+}
+
+.np-download-success__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0;
+  text-align: left;
+}
+
+.np-download-success__step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--paper-soft, #FBF9F6);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.np-download-success__step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: var(--sky, #3FB6E8);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.np-download-success__note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--muted, #7A6F63);
+  padding: 6px 14px;
+  background: #FEF3C7;
+  border-radius: 8px;
+}
+
+/* Modal Download Hint */
+.np-modal__download-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #FEF3C7;
+  border-radius: 8px;
+  margin-top: 12px;
+  font-size: 0.85rem;
+  color: #92400E;
+}
+
+.np-modal__download-hint a {
+  color: var(--sky, #3FB6E8);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.np-modal__download-hint a:hover {
+  text-decoration: underline;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .np-download-request {
+    padding: 16px;
+    margin: 0 4px;
+  }
+  
+  .np-download-request__features {
+    gap: 8px;
+  }
+  
+  .np-download-success__steps {
+    gap: 6px;
+  }
+  
+  .np-download-success__step {
+    font-size: 0.8rem;
+    padding: 6px 10px;
+  }
+}
