@@ -11,20 +11,31 @@ const { createInitialAdmin } = require('./controllers/authController');
 
 const app = express();
 
-// CORS configuration
+// CORS configuration - Allow all origins for Render deployment
 const corsOptions = {
-  origin: ['http://localhost:8080', 'http://localhost:3000', 'http://127.0.0.1:8080', 'http://127.0.0.1:3000'],
+  origin: [
+    'https://partymembersall.onrender.com',
+    'https://partymembersbackendnew.onrender.com',
+    'http://localhost:3000',
+    'http://localhost:8080',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:8080'
+  ],
   credentials: true,
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
 };
 
 app.use(cors(corsOptions));
 
-// Security middleware
+// Also handle preflight requests explicitly
+app.options('*', cors(corsOptions));
+
+// Security middleware - Helmet needs to be configured to allow CORS
 app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" }
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginOpenerPolicy: { policy: "unsafe-none" }
 }));
 
 // Body parser middleware
@@ -38,7 +49,25 @@ app.use('/api/records', recordRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV
+  });
+});
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Party Members Backend API',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth/login',
+      files: '/api/files',
+      records: '/api/records'
+    }
+  });
 });
 
 // Error handling middleware
