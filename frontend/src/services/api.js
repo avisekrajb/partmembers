@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080/api';
+const API_URL = process.env.REACT_APP_API_URL || 'https://partymembersbackendnew.onrender.com/api';
 
 // Create axios instance
 const axiosInstance = axios.create({
@@ -47,63 +47,113 @@ axiosInstance.interceptors.response.use(
 export const api = {
   // Auth
   login: async (email, password) => {
-    const response = await axiosInstance.post('/auth/login', { email, password });
-    return response.data;
+    try {
+      const response = await axiosInstance.post('/auth/login', { email, password });
+      return response.data;
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
+    }
   },
 
   verifyToken: async () => {
-    const response = await axiosInstance.get('/auth/verify');
-    return response.data;
+    try {
+      const response = await axiosInstance.get('/auth/verify');
+      return response.data;
+    } catch (error) {
+      console.error('Token verification error:', error);
+      throw error;
+    }
   },
 
   // Files - Public view, Admin upload/delete
   getFiles: async () => {
-    const response = await axiosInstance.get('/files');
-    return response.data;
+    try {
+      const response = await axiosInstance.get('/files');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching files:', error);
+      throw error;
+    }
   },
 
   uploadFiles: async (formData) => {
-    const response = await axiosInstance.post('/files/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-    return response.data;
+    try {
+      const response = await axiosInstance.post('/files/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Upload error:', error);
+      throw error;
+    }
   },
 
   deleteFile: async (fileId) => {
-    const response = await axiosInstance.delete(`/files/${fileId}`);
-    return response.data;
+    try {
+      const response = await axiosInstance.delete(`/files/${fileId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Delete error:', error);
+      throw error;
+    }
   },
 
   // Records - Public view, Admin edit
   getRecordsByFileId: async (fileId) => {
-    const response = await axiosInstance.get(`/records/file/${fileId}`);
-    return response.data;
+    try {
+      const response = await axiosInstance.get(`/records/file/${fileId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching records by file:', error);
+      throw error;
+    }
   },
 
   getAllRecords: async (params = {}) => {
-    const response = await axiosInstance.get('/records', { params });
-    return response.data;
+    try {
+      const response = await axiosInstance.get('/records', { params });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching all records:', error);
+      throw error;
+    }
   },
 
   searchRecords: async (query, field = null) => {
-    const params = { q: query, transliterate: true };
-    if (field) params.field = field;
-    const response = await axiosInstance.get('/records/search', { params });
-    return response.data;
+    try {
+      const params = { q: query, transliterate: true };
+      if (field) params.field = field;
+      const response = await axiosInstance.get('/records/search', { params });
+      return response.data;
+    } catch (error) {
+      console.error('Search error:', error);
+      throw error;
+    }
   },
 
   // Records - Admin only
   updateRecord: async (id, data) => {
-    const response = await axiosInstance.put(`/records/${id}`, data);
-    return response.data;
+    try {
+      const response = await axiosInstance.put(`/records/${id}`, data);
+      return response.data;
+    } catch (error) {
+      console.error('Update error:', error);
+      throw error;
+    }
   },
 
   exportRecords: async (fileId = null) => {
-    const params = fileId ? { fileId } : {};
-    const response = await axiosInstance.get('/records/export', { params });
-    return response.data;
+    try {
+      const params = fileId ? { fileId } : {};
+      const response = await axiosInstance.get('/records/export', { params });
+      return response.data;
+    } catch (error) {
+      console.error('Export error:', error);
+      throw error;
+    }
   },
 };
 
