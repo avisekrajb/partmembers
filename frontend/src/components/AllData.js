@@ -11,13 +11,15 @@ import {
   Download,
   RefreshCw,
   Languages,
-  CheckCircle
+  CheckCircle,
+  Shield
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import DataTable from './DataTable';
 import RecordModal from './RecordModal';
 import InfinityLoader from './InfinityLoader';
+import DownloadRequest from './DownloadRequest';
 import { api } from '../services/api';
 import { translateSearchTerm } from '../utils/translation';
 import * as XLSX from 'xlsx';
@@ -40,6 +42,7 @@ function AllData() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [showEnglishLabels, setShowEnglishLabels] = useState(false);
+  const [showDownloadRequest, setShowDownloadRequest] = useState(false);
   const [stats, setStats] = useState({
     total: 0,
     missingCitizenship: 0,
@@ -173,7 +176,7 @@ function AllData() {
       calculateStats(data);
     } catch (err) {
       console.error('Error fetching records:', err);
-      setError('Failed to load records');
+      setError('Failed to load records. Please try again.');
       setRecords([]);
       calculateStats([]);
     } finally {
@@ -224,6 +227,10 @@ function AllData() {
 
   const toggleLanguage = () => {
     setShowEnglishLabels(!showEnglishLabels);
+  };
+
+  const toggleDownloadRequest = () => {
+    setShowDownloadRequest(!showDownloadRequest);
   };
 
   const handleRecordClick = (record) => {
@@ -356,6 +363,13 @@ function AllData() {
           </button>
           <button 
             className="np-btn np-btn--sky np-btn--sm"
+            onClick={toggleDownloadRequest}
+          >
+            <Download size={16} />
+            Request Download
+          </button>
+          <button 
+            className="np-btn np-btn--sky np-btn--sm"
             onClick={handleExport}
             disabled={exporting || records.length === 0}
           >
@@ -475,6 +489,19 @@ function AllData() {
           </p>
         )}
       </div>
+
+      {/* Download Request Section */}
+      {showDownloadRequest && (
+        <div className="np-download-section">
+          <DownloadRequest fileId={activeFileId} />
+          <button 
+            className="np-btn np-btn--ghost np-btn--sm"
+            onClick={toggleDownloadRequest}
+          >
+            Close
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="np-alert np-alert--error">
