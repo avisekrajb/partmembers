@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Languages,
   CheckCircle,
+  Lock,
   Shield
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -43,6 +44,8 @@ function AllData() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [showEnglishLabels, setShowEnglishLabels] = useState(false);
   const [showDownloadRequest, setShowDownloadRequest] = useState(false);
+  const [isDownloadApproved, setIsDownloadApproved] = useState(false);
+  const [downloadToken, setDownloadToken] = useState(null);
   const [stats, setStats] = useState({
     total: 0,
     missingCitizenship: 0,
@@ -92,6 +95,30 @@ function AllData() {
       setSearchTerm(search);
     }
   }, [location.search]);
+
+  // Check for download approval status
+  useEffect(() => {
+    const checkDownloadStatus = async () => {
+      const token = localStorage.getItem('downloadToken');
+      if (token) {
+        try {
+          const response = await api.checkDownloadStatus(token);
+          if (response.valid && response.status === 'approved') {
+            setIsDownloadApproved(true);
+            setDownloadToken(token);
+          } else {
+            localStorage.removeItem('downloadToken');
+            setIsDownloadApproved(false);
+          }
+        } catch (error) {
+          console.error('Error checking download status:', error);
+          localStorage.removeItem('downloadToken');
+          setIsDownloadApproved(false);
+        }
+      }
+    };
+    checkDownloadStatus();
+  }, []);
 
   // Fetch all files
   useEffect(() => {
@@ -297,7 +324,14 @@ function AllData() {
     }
   };
 
+  // Handle export - ONLY if download is approved
   const handleExport = async () => {
+    if (!isDownloadApproved) {
+      toast.warning('Please request and get approval for download first.');
+      setShowDownloadRequest(true);
+      return;
+    }
+
     setExporting(true);
     try {
       const response = await api.exportRecords(activeFileId);
@@ -314,6 +348,12 @@ function AllData() {
       const filename = `voter_records_${new Date().toISOString().split('T')[0]}.xlsx`;
       XLSX.writeFile(wb, filename);
       toast.success(`Exported ${response.data.length} records successfully`);
+      
+      // Reset download approval after export
+      localStorage.removeItem('downloadToken');
+      setIsDownloadApproved(false);
+      setDownloadToken(null);
+      
     } catch (error) {
       console.error('Export error:', error);
       toast.error('Failed to export data');
@@ -368,14 +408,34 @@ function AllData() {
             <Download size={16} />
             Request Download
           </button>
+          {/* Export Button - Locked unless approved */}
           <button 
-            className="np-btn np-btn--sky np-btn--sm"
+            className={`np-btn np-btn--sm ${isDownloadApproved ? 'np-btn--red' : 'np-btn--ghost'}`}
             onClick={handleExport}
-            disabled={exporting || records.length === 0}
+            disabled={exporting || records.length === 0 || !isDownloadApproved}
+            title={!isDownloadApproved ? 'Request download approval first' : 'Export data'}
           >
-            {exporting ? <RefreshCw size={16} className="np-spinning" /> : <Download size={16} />}
-            Export XLSX
+            {exporting ? (
+              <RefreshCw size={16} className="np-spinning" />
+            ) : isDownloadApproved ? (
+              <Download size={16} />
+            ) : (
+              <Lock size={16} />
+            )}
+            {isDownloadApproved ? 'Export XLSX' : '🔒 Locked'}
           </button>
+          {!isDownloadApproved && records.length > 0 && (
+            <span className="np-lock-hint">
+              <Shield size={12} />
+              Request approval to download
+            </span>
+          )}
+          {isDownloadApproved && (
+            <span className="np-approved-badge">
+              <CheckCircle size={12} />
+              Approved
+            </span>
+          )}
           {files.length > 0 && !searchTerm && (
             <div className="np-select">
               <select 
@@ -493,7 +553,16 @@ function AllData() {
       {/* Download Request Section */}
       {showDownloadRequest && (
         <div className="np-download-section">
-          <DownloadRequest fileId={activeFileId} />
+          <DownloadRequest 
+            fileId={activeFileId} 
+            onApproval={(token) => {
+              setIsDownloadApproved(true);
+              setDownloadToken(token);
+              localStorage.setItem('downloadToken', token);
+              setShowDownloadRequest(false);
+              toast.success('Download approved! You can now export data.');
+            }}
+          />
           <button 
             className="np-btn np-btn--ghost np-btn--sm"
             onClick={toggleDownloadRequest}
