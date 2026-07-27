@@ -22,7 +22,11 @@ import {
   Phone,
   CheckCircle,
   XCircle,
-  RefreshCw
+  RefreshCw,
+  BarChart3,
+  TrendingUp,
+  TrendingDown,
+  PieChart
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -46,6 +50,7 @@ function Dashboard() {
   const [downloadRequests, setDownloadRequests] = useState([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [processingRequest, setProcessingRequest] = useState(null);
+  const [expandedRequestId, setExpandedRequestId] = useState(null);
   const [stats, setStats] = useState({
     totalFiles: 0,
     totalRecords: 0,
@@ -55,8 +60,13 @@ function Dashboard() {
     pendingRequests: 0,
     approvedRequests: 0,
     rejectedRequests: 0,
-    downloadedRequests: 0
+    downloadedRequests: 0,
+    totalMale: 0,
+    totalFemale: 0,
+    totalOther: 0
   });
+  const [districtStats, setDistrictStats] = useState([]);
+  const [showStats, setShowStats] = useState(false);
   const folderInputRef = useRef(null);
 
   // Fetch files on mount
@@ -77,6 +87,10 @@ function Dashboard() {
       let totalComplete = 0;
       let totalMissingCitizenship = 0;
       let totalMissingVoterNumber = 0;
+      let totalMale = 0;
+      let totalFemale = 0;
+      let totalOther = 0;
+      const districtMap = {};
       
       response.forEach(file => {
         totalRecords += file.rowCount || 0;
@@ -116,8 +130,28 @@ function Dashboard() {
           if (!hasCitizenship || !citizenshipValid) totalMissingCitizenship++;
           if (!hasVoterNumber || !voterValid) totalMissingVoterNumber++;
           if (citizenshipValid && voterValid) totalComplete++;
+          
+          // Gender stats
+          const gender = (record.gender || '').toLowerCase();
+          if (gender === 'male' || gender === 'पुरुष') totalMale++;
+          else if (gender === 'female' || gender === 'महिला') totalFemale++;
+          else if (gender) totalOther++;
+          
+          // District stats
+          if (record.district) {
+            const district = record.district.trim();
+            districtMap[district] = (districtMap[district] || 0) + 1;
+          }
         });
       }
+      
+      // Sort district stats
+      const sortedDistricts = Object.entries(districtMap)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([name, count]) => ({ name, count }));
+      
+      setDistrictStats(sortedDistricts);
       
       setStats(prev => ({
         ...prev,
@@ -125,7 +159,10 @@ function Dashboard() {
         totalRecords,
         totalComplete,
         totalMissingCitizenship,
-        totalMissingVoterNumber
+        totalMissingVoterNumber,
+        totalMale,
+        totalFemale,
+        totalOther
       }));
       
     } catch (error) {
@@ -240,6 +277,7 @@ function Dashboard() {
       setViewingRecords(response.records || []);
       setSearchTerm('');
       setSearchResults([]);
+      toast.success(`Loaded ${response.records?.length || 0} records`);
     } catch (error) {
       console.error('Error viewing records:', error);
       toast.error('Failed to load records');
@@ -307,12 +345,17 @@ function Dashboard() {
   const handleApproveRequest = async (id) => {
     setProcessingRequest(id);
     try {
-      await api.approveDownload(id);
-      toast.success('Download request approved! User has been notified.');
+      const response = await api.approveDownload(id);
+      toast.success('✅ Download request approved! User has been notified.');
       await fetchDownloadRequests();
+      
+      // Show token if available
+      if (response.downloadToken) {
+        console.log('Download token:', response.downloadToken);
+      }
     } catch (error) {
       console.error('Error approving request:', error);
-      toast.error('Failed to approve request');
+      toast.error('Failed to approve request: ' + (error.response?.data?.message || error.message));
     } finally {
       setProcessingRequest(null);
     }
@@ -338,6 +381,10 @@ function Dashboard() {
     toast.info('Refreshed download requests');
   };
 
+  const toggleRequestExpand = (id) => {
+    setExpandedRequestId(expandedRequestId === id ? null : id);
+  };
+
   const displayRecords = searchResults.length > 0 ? searchResults : viewingRecords;
 
   const getStatusBadge = (status) => {
@@ -353,6 +400,17 @@ function Dashboard() {
       default:
         return <span className="np-badge">{status}</span>;
     }
+  };
+
+  const formatDate = (date) => {
+    if (!date) return 'N/A';
+    return new Date(date).toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   if (loading) {
@@ -376,11 +434,21 @@ function Dashboard() {
             {isAuthenticated ? 'Upload and manage voter data' : 'View all uploaded data (Login to upload/delete)'}
           </p>
         </div>
-        {isAuthenticated && (
-          <button className="np-btn np-btn--ghost" onClick={logout}>
-            <LogOut size={16} /> Log out
-          </button>
-        )}
+        <div className="np-page__head-actions">
+          {isAuthenticated && (
+            <>
+              <button 
+                className="np-btn np-btn--ghost np-btn--sm"
+                onClick={() => setShowStats(!showStats)}
+              >
+                <BarChart3 size={16} /> {showStats ? 'Hide Stats' : 'Show Stats'}
+              </button>
+              <button className="np-btn np-btn--ghost" onClick={logout}>
+                <LogOut size={16} /> Log out
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -422,6 +490,58 @@ function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Additional Stats when expanded */}
+      {showStats && isAuthenticated && (
+        <div className="np-stats-expanded">
+          <div className="np-stats-expanded__grid">
+            <div className="np-stat-card np-stat-card--small">
+              <div className="np-stat-card__info">
+                <span className="np-stat-card__value">{stats.totalMale}</span>
+                <span className="np-stat-card__label">Male</span>
+              </div>
+            </div>
+            <div className="np-stat-card np-stat-card--small">
+              <div className="np-stat-card__info">
+                <span className="np-stat-card__value">{stats.totalFemale}</span>
+                <span className="np-stat-card__label">Female</span>
+              </div>
+            </div>
+            <div className="np-stat-card np-stat-card--small">
+              <div className="np-stat-card__info">
+                <span className="np-stat-card__value">{stats.totalOther}</span>
+                <span className="np-stat-card__label">Other</span>
+              </div>
+            </div>
+            <div className="np-stat-card np-stat-card--small">
+              <div className="np-stat-card__info">
+                <span className="np-stat-card__value">{stats.totalMissingVoterNumber}</span>
+                <span className="np-stat-card__label">Missing Voter #</span>
+              </div>
+            </div>
+          </div>
+          
+          {districtStats.length > 0 && (
+            <div className="np-district-stats">
+              <h4>Top Districts</h4>
+              <div className="np-district-stats__list">
+                {districtStats.map((district, index) => (
+                  <div key={index} className="np-district-stat">
+                    <span className="np-district-stat__name">{district.name}</span>
+                    <div className="np-district-stat__bar">
+                      <div 
+                        className="np-district-stat__bar-fill" 
+                        style={{ width: `${(district.count / stats.totalRecords) * 100}%` }}
+                      />
+                    </div>
+                    <span className="np-district-stat__count">{district.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Upload zone - Only for authenticated users */}
       {isAuthenticated ? (
@@ -480,6 +600,7 @@ function Dashboard() {
           >
             <FileSpreadsheet size={16} />
             Files
+            <span className="np-tab-badge">{stats.totalFiles}</span>
           </button>
           <button 
             className={`np-tab ${activeTab === 'requests' ? 'np-tab--active' : ''}`}
@@ -488,7 +609,7 @@ function Dashboard() {
             <Download size={16} />
             Download Requests
             {stats.pendingRequests > 0 && (
-              <span className="np-tab-badge">{stats.pendingRequests}</span>
+              <span className="np-tab-badge np-tab-badge--pending">{stats.pendingRequests}</span>
             )}
           </button>
         </div>
@@ -568,6 +689,9 @@ function Dashboard() {
               {searchResults.length > 0 && (
                 <div className="np-search-info">
                   Found <strong>{searchResults.length}</strong> records matching "<strong>{searchTerm}</strong>"
+                  <button className="np-search-info__clear" onClick={clearSearch}>
+                    <X size={14} /> Clear
+                  </button>
                 </div>
               )}
 
@@ -576,6 +700,12 @@ function Dashboard() {
               {displayRecords.length === 0 && searchTerm && (
                 <div className="np-empty">
                   <p>No records found matching "<strong>{searchTerm}</strong>"</p>
+                </div>
+              )}
+              
+              {displayRecords.length === 0 && !searchTerm && (
+                <div className="np-empty">
+                  <p>No records found in this file</p>
                 </div>
               )}
             </div>
@@ -625,60 +755,101 @@ function Dashboard() {
           ) : (
             <div className="np-requests-list">
               {downloadRequests.map((request) => (
-                <div key={request._id} className="np-request-item">
-                  <div className="np-request-item__info">
-                    <div className="np-request-item__user">
-                      <User size={16} />
-                      <strong>{request.name}</strong>
-                    </div>
-                    <div className="np-request-item__details">
-                      <span><Mail size={14} /> {request.email}</span>
-                      <span><Phone size={14} /> {request.phone}</span>
-                      <span className="np-request-item__date">
-                        {new Date(request.requestDate).toLocaleDateString()}
-                      </span>
-                      {request.fileId && (
-                        <span className="np-request-item__file">
-                          <FileSpreadsheet size={14} /> {request.fileId.name || 'File'}
+                <div 
+                  key={request._id} 
+                  className={`np-request-item ${expandedRequestId === request._id ? 'np-request-item--expanded' : ''}`}
+                >
+                  <div className="np-request-item__main">
+                    <div className="np-request-item__info">
+                      <div className="np-request-item__user">
+                        <User size={16} />
+                        <strong>{request.name}</strong>
+                      </div>
+                      <div className="np-request-item__details">
+                        <span><Mail size={14} /> {request.email}</span>
+                        <span><Phone size={14} /> {request.phone}</span>
+                        <span className="np-request-item__date">
+                          {formatDate(request.requestDate)}
                         </span>
-                      )}
+                      </div>
                     </div>
+                    
+                    <div className="np-request-item__status">
+                      {getStatusBadge(request.status)}
+                    </div>
+
+                    {request.status === 'pending' && (
+                      <div className="np-request-item__actions">
+                        <button 
+                          className="np-btn np-btn--red np-btn--sm"
+                          onClick={() => handleApproveRequest(request._id)}
+                          disabled={processingRequest === request._id}
+                        >
+                          {processingRequest === request._id ? (
+                            <><Loader size={14} className="np-spinning" /> Processing...</>
+                          ) : (
+                            'Approve'
+                          )}
+                        </button>
+                        <button 
+                          className="np-btn np-btn--ghost np-btn--sm"
+                          onClick={() => handleRejectRequest(request._id)}
+                          disabled={processingRequest === request._id}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    )}
+
+                    <button 
+                      className="np-request-item__expand"
+                      onClick={() => toggleRequestExpand(request._id)}
+                    >
+                      {expandedRequestId === request._id ? '▲' : '▼'}
+                    </button>
                   </div>
-                  
-                  <div className="np-request-item__status">
-                    {getStatusBadge(request.status)}
-                  </div>
 
-                  {request.status === 'pending' && (
-                    <div className="np-request-item__actions">
-                      <button 
-                        className="np-btn np-btn--red np-btn--sm"
-                        onClick={() => handleApproveRequest(request._id)}
-                        disabled={processingRequest === request._id}
-                      >
-                        {processingRequest === request._id ? 'Processing...' : 'Approve'}
-                      </button>
-                      <button 
-                        className="np-btn np-btn--ghost np-btn--sm"
-                        onClick={() => handleRejectRequest(request._id)}
-                        disabled={processingRequest === request._id}
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  )}
-
-                  {request.status === 'approved' && request.downloadToken && (
-                    <div className="np-request-item__token">
-                      <span className="np-muted">Token: </span>
-                      <code>{request.downloadToken.substring(0, 16)}...</code>
-                    </div>
-                  )}
-
-                  {request.status === 'rejected' && request.reason && (
-                    <div className="np-request-item__reason">
-                      <span className="np-muted">Reason: </span>
-                      <span>{request.reason}</span>
+                  {/* Expanded details */}
+                  {expandedRequestId === request._id && (
+                    <div className="np-request-item__expanded">
+                      <div className="np-request-item__expanded-grid">
+                        <div>
+                          <strong>Request ID:</strong>
+                          <code>{request._id}</code>
+                        </div>
+                        <div>
+                          <strong>IP Address:</strong>
+                          <span>{request.ipAddress || 'Unknown'}</span>
+                        </div>
+                        <div>
+                          <strong>User Agent:</strong>
+                          <span className="np-muted">{request.userAgent || 'Unknown'}</span>
+                        </div>
+                        {request.fileId && (
+                          <div>
+                            <strong>File:</strong>
+                            <span>{request.fileId.name || 'Unknown'}</span>
+                          </div>
+                        )}
+                        {request.status === 'approved' && request.approvedDate && (
+                          <div>
+                            <strong>Approved Date:</strong>
+                            <span>{formatDate(request.approvedDate)}</span>
+                          </div>
+                        )}
+                        {request.status === 'downloaded' && request.downloadedDate && (
+                          <div>
+                            <strong>Downloaded Date:</strong>
+                            <span>{formatDate(request.downloadedDate)}</span>
+                          </div>
+                        )}
+                        {request.status === 'approved' && request.downloadToken && (
+                          <div className="np-request-item__token-full">
+                            <strong>Download Token:</strong>
+                            <code className="np-request-item__token-code">{request.downloadToken}</code>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
