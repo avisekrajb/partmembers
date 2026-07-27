@@ -17,10 +17,13 @@ const createTransporter = () => {
       return null;
     }
 
-    // For Gmail
-    if (process.env.EMAIL_SERVICE === 'gmail' || process.env.EMAIL_SERVICE === 'Gmail') {
+    // For Gmail with explicit config (fixes timeout issues)
+    if (process.env.EMAIL_SERVICE === 'gmail' || process.env.EMAIL_SERVICE === 'Gmail' || !process.env.EMAIL_HOST) {
+      console.log('📧 Configuring Gmail transporter...');
       transporter = nodemailer.createTransport({
-        service: 'gmail',
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false, // true for 465, false for other ports
         auth: {
           user: process.env.EMAIL_USER,
           pass: process.env.EMAIL_PASSWORD
@@ -30,10 +33,14 @@ const createTransporter = () => {
         },
         connectionTimeout: 30000,
         greetingTimeout: 30000,
-        socketTimeout: 30000
+        socketTimeout: 30000,
+        pool: true,
+        maxConnections: 1,
+        rateLimit: 5
       });
     } else {
       // For other email services
+      console.log('📧 Configuring custom SMTP transporter...');
       transporter = nodemailer.createTransport({
         host: process.env.EMAIL_HOST || 'smtp.gmail.com',
         port: parseInt(process.env.EMAIL_PORT) || 587,
@@ -47,7 +54,10 @@ const createTransporter = () => {
         },
         connectionTimeout: 30000,
         greetingTimeout: 30000,
-        socketTimeout: 30000
+        socketTimeout: 30000,
+        pool: true,
+        maxConnections: 1,
+        rateLimit: 5
       });
     }
     
@@ -116,9 +126,11 @@ const sendEmailWithRetry = async (mailOptions, maxRetries = 3) => {
 // Send admin notification
 const sendAdminNotification = async (request) => {
   try {
+    console.log(`📧 Attempting to send admin notification for request: ${request._id}`);
+    
     if (!verifyEmailConfig()) {
       console.log('⚠️ Email config missing, skipping admin notification');
-      return;
+      return { success: false, error: 'Email config missing' };
     }
 
     const adminEmail = process.env.ADMIN_EMAIL;
@@ -129,7 +141,7 @@ const sendAdminNotification = async (request) => {
       transporter = createTransporter();
       if (!transporter) {
         console.log('⚠️ Cannot send email: transporter not available');
-        return;
+        return { success: false, error: 'Transporter not available' };
       }
     }
     
@@ -162,32 +174,36 @@ const sendAdminNotification = async (request) => {
       `
     };
 
-    await sendEmailWithRetry(mailOptions);
+    const result = await sendEmailWithRetry(mailOptions);
     console.log('✅ Admin notification sent to:', adminEmail);
+    return { success: true, messageId: result.messageId };
     
   } catch (error) {
     console.error('❌ Admin notification error:', error.message);
-    // Don't throw - admin notification failure shouldn't break the flow
+    return { success: false, error: error.message };
   }
 };
 
 // Send approval email to user
 const sendApprovalEmail = async (request) => {
   try {
+    console.log(`📧 Attempting to send approval email to: ${request.email}`);
+    
     if (!verifyEmailConfig()) {
       console.log('⚠️ Email config missing, skipping approval email');
-      return;
+      return { success: false, error: 'Email config missing' };
     }
 
     const frontendUrl = process.env.FRONTEND_URL || 'https://partymembersall.onrender.com';
     const downloadUrl = `${frontendUrl}/download/${request.downloadToken}`;
+    console.log(`📧 Download URL: ${downloadUrl}`);
     
     // Check if transporter is available
     if (!transporter) {
       transporter = createTransporter();
       if (!transporter) {
         console.log('⚠️ Cannot send email: transporter not available');
-        return;
+        return { success: false, error: 'Transporter not available' };
       }
     }
     
@@ -229,21 +245,24 @@ const sendApprovalEmail = async (request) => {
       `
     };
 
-    await sendEmailWithRetry(mailOptions);
-    console.log('✅ Approval email sent to:', request.email);
+    const result = await sendEmailWithRetry(mailOptions);
+    console.log(`✅ Approval email sent to: ${request.email}`, result.messageId);
+    return { success: true, messageId: result.messageId };
     
   } catch (error) {
-    console.error('❌ Approval email error:', error.message);
-    // Don't throw - email failure shouldn't break the flow
+    console.error(`❌ Approval email error for ${request.email}:`, error.message);
+    return { success: false, error: error.message };
   }
 };
 
 // Send rejection email to user
 const sendRejectionEmail = async (request, reason) => {
   try {
+    console.log(`📧 Attempting to send rejection email to: ${request.email}`);
+    
     if (!verifyEmailConfig()) {
       console.log('⚠️ Email config missing, skipping rejection email');
-      return;
+      return { success: false, error: 'Email config missing' };
     }
 
     const frontendUrl = process.env.FRONTEND_URL || 'https://partymembersall.onrender.com';
@@ -253,7 +272,7 @@ const sendRejectionEmail = async (request, reason) => {
       transporter = createTransporter();
       if (!transporter) {
         console.log('⚠️ Cannot send email: transporter not available');
-        return;
+        return { success: false, error: 'Transporter not available' };
       }
     }
     
@@ -287,12 +306,13 @@ const sendRejectionEmail = async (request, reason) => {
       `
     };
 
-    await sendEmailWithRetry(mailOptions);
-    console.log('✅ Rejection email sent to:', request.email);
+    const result = await sendEmailWithRetry(mailOptions);
+    console.log(`✅ Rejection email sent to: ${request.email}`, result.messageId);
+    return { success: true, messageId: result.messageId };
     
   } catch (error) {
-    console.error('❌ Rejection email error:', error.message);
-    // Don't throw - email failure shouldn't break the flow
+    console.error(`❌ Rejection email error for ${request.email}:`, error.message);
+    return { success: false, error: error.message };
   }
 };
 
@@ -302,6 +322,8 @@ const sendRejectionEmail = async (request, reason) => {
 const requestDownload = async (req, res) => {
   try {
     const { name, email, phone, fileId } = req.body;
+    
+    console.log(`📝 New download request from: ${email}`);
     
     // Validate input
     if (!name || !email || !phone) {
@@ -353,6 +375,7 @@ const requestDownload = async (req, res) => {
     });
 
     await downloadRequest.save();
+    console.log(`✅ Request saved with ID: ${downloadRequest._id}`);
 
     // Send email to admin (don't await - let it run in background)
     sendAdminNotification(downloadRequest).catch(err => {
@@ -366,7 +389,7 @@ const requestDownload = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Request download error:', error);
+    console.error('❌ Request download error:', error);
     res.status(500).json({ 
       message: 'Failed to submit download request. Please try again.' 
     });
@@ -378,6 +401,8 @@ const checkDownloadStatus = async (req, res) => {
   try {
     const { token } = req.params;
     
+    console.log(`🔍 Checking download status for token: ${token.substring(0, 16)}...`);
+    
     const request = await DownloadRequest.findOne({ downloadToken: token });
     
     if (!request) {
@@ -386,6 +411,8 @@ const checkDownloadStatus = async (req, res) => {
         message: 'Invalid download token' 
       });
     }
+
+    console.log(`📋 Status: ${request.status} for ${request.email}`);
 
     res.json({
       valid: true,
@@ -398,7 +425,7 @@ const checkDownloadStatus = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Check download status error:', error);
+    console.error('❌ Check download status error:', error);
     res.status(500).json({ 
       message: 'Failed to check download status' 
     });
@@ -410,6 +437,8 @@ const downloadFile = async (req, res) => {
   try {
     const { token } = req.params;
     
+    console.log(`📥 Download requested for token: ${token.substring(0, 16)}...`);
+    
     const request = await DownloadRequest.findOne({ 
       downloadToken: token,
       status: 'approved'
@@ -420,6 +449,8 @@ const downloadFile = async (req, res) => {
         message: 'Invalid or expired download token. Please request a new download.' 
       });
     }
+
+    console.log(`📊 Fetching records for ${request.name}...`);
 
     // Get records
     let records;
@@ -438,6 +469,8 @@ const downloadFile = async (req, res) => {
     if (!records || records.length === 0) {
       return res.status(404).json({ message: 'No records found to download' });
     }
+
+    console.log(`📊 Found ${records.length} records`);
 
     // Create watermarked Excel file
     const workbook = XLSX.utils.book_new();
@@ -509,6 +542,8 @@ const downloadFile = async (req, res) => {
     request.status = 'downloaded';
     request.downloadedDate = new Date();
     await request.save();
+    
+    console.log(`✅ Download completed for ${request.name}`);
 
     // Generate buffer
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
@@ -520,7 +555,7 @@ const downloadFile = async (req, res) => {
     res.send(buffer);
 
   } catch (error) {
-    console.error('Download error:', error);
+    console.error('❌ Download error:', error);
     res.status(500).json({ 
       message: 'Failed to download file. Please try again.' 
     });
@@ -538,7 +573,7 @@ const getDownloadRequests = async (req, res) => {
     
     res.json(requests);
   } catch (error) {
-    console.error('Get download requests error:', error);
+    console.error('❌ Get download requests error:', error);
     res.status(500).json({ 
       message: 'Failed to fetch download requests' 
     });
@@ -549,6 +584,8 @@ const getDownloadRequests = async (req, res) => {
 const approveDownload = async (req, res) => {
   try {
     const { id } = req.params;
+    
+    console.log(`🔍 Approving request: ${id}`);
     
     const request = await DownloadRequest.findById(id);
     if (!request) {
@@ -564,6 +601,8 @@ const approveDownload = async (req, res) => {
     request.status = 'approved';
     request.approvedDate = new Date();
     await request.save();
+    
+    console.log(`✅ Request approved for ${request.email}`);
 
     // Send approval email to user (don't await - run in background)
     sendApprovalEmail(request).catch(err => {
@@ -577,7 +616,7 @@ const approveDownload = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Approve download error:', error);
+    console.error('❌ Approve download error:', error);
     res.status(500).json({ 
       message: 'Failed to approve download request' 
     });
@@ -589,6 +628,8 @@ const rejectDownload = async (req, res) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
+    
+    console.log(`🔍 Rejecting request: ${id}`);
     
     const request = await DownloadRequest.findById(id);
     if (!request) {
@@ -603,6 +644,8 @@ const rejectDownload = async (req, res) => {
 
     request.status = 'rejected';
     await request.save();
+    
+    console.log(`✅ Request rejected for ${request.email}`);
 
     // Send rejection email to user (don't await - run in background)
     sendRejectionEmail(request, reason).catch(err => {
@@ -614,16 +657,20 @@ const rejectDownload = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Reject download error:', error);
+    console.error('❌ Reject download error:', error);
     res.status(500).json({ 
       message: 'Failed to reject download request' 
     });
   }
 };
 
+// ==================== TEST FUNCTION ====================
+
 // Test email configuration
 const testEmailConfig = async () => {
   try {
+    console.log('📧 Testing email configuration...');
+    
     if (!verifyEmailConfig()) {
       return { success: false, message: 'Email credentials not configured' };
     }
@@ -636,6 +683,7 @@ const testEmailConfig = async () => {
     }
     
     await transporter.verify();
+    console.log('✅ SMTP connection verified');
     
     // Send test email to admin
     const testMailOptions = {
@@ -648,6 +696,7 @@ const testEmailConfig = async () => {
           <p>This is a test email to confirm that the email configuration is working properly.</p>
           <p><strong>Time:</strong> ${new Date().toISOString()}</p>
           <p><strong>Environment:</strong> ${process.env.NODE_ENV || 'development'}</p>
+          <p><strong>Email Service:</strong> ${process.env.EMAIL_SERVICE || 'Gmail'}</p>
           <hr>
           <p style="color: #6c757d; font-size: 12px;">
             <em>Zero Infinity - Party Members</em>
@@ -656,15 +705,17 @@ const testEmailConfig = async () => {
       `
     };
     
-    await transporter.sendMail(testMailOptions);
-    console.log('✅ Test email sent successfully');
-    return { success: true, message: 'Email test successful' };
+    const result = await transporter.sendMail(testMailOptions);
+    console.log('✅ Test email sent successfully:', result.messageId);
+    return { success: true, message: 'Email test successful', messageId: result.messageId };
     
   } catch (error) {
     console.error('❌ Email test failed:', error.message);
     return { success: false, message: error.message };
   }
 };
+
+// ==================== EXPORTS ====================
 
 module.exports = {
   requestDownload,
@@ -673,5 +724,8 @@ module.exports = {
   getDownloadRequests,
   approveDownload,
   rejectDownload,
-  testEmailConfig
+  testEmailConfig,
+  sendAdminNotification,
+  sendApprovalEmail,
+  sendRejectionEmail
 };
