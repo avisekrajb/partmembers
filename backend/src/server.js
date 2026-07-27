@@ -75,6 +75,124 @@ app.get('/', (req, res) => {
   });
 });
 
+// =============================================
+// TEST EMAIL ENDPOINT - Remove after testing
+// =============================================
+app.get('/api/test-email', async (req, res) => {
+  try {
+    // Import nodemailer here or use the one from downloadController
+    const nodemailer = require('nodemailer');
+    
+    // Create transporter (same as in downloadController)
+    const transporter = nodemailer.createTransport({
+      service: process.env.EMAIL_SERVICE || 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD
+      }
+    });
+
+    console.log('📧 Testing email...');
+    console.log('From:', process.env.EMAIL_USER);
+    console.log('To:', process.env.ADMIN_EMAIL || 'your-test-email@gmail.com');
+    
+    const info = await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: process.env.ADMIN_EMAIL || 'your-test-email@gmail.com',
+      subject: '✅ Render Email Test - ' + new Date().toISOString(),
+      html: `
+        <h2>Email is Working!</h2>
+        <p>This test email was sent from your Render deployment.</p>
+        <p><strong>Time:</strong> ${new Date().toISOString()}</p>
+        <p><strong>Service:</strong> partymembersbackendnew</p>
+        <p><strong>Transporter:</strong> ${process.env.EMAIL_SERVICE || 'Gmail'}</p>
+        <p><strong>Email User:</strong> ${process.env.EMAIL_USER}</p>
+        <hr>
+        <p>If you received this, your email configuration is working correctly!</p>
+        <p><em>Zero Infinity - Party Members</em></p>
+      `
+    });
+    
+    console.log('✅ Email sent! MessageID:', info.messageId);
+    
+    res.json({ 
+      success: true, 
+      message: 'Test email sent successfully!',
+      messageId: info.messageId,
+      accepted: info.accepted,
+      to: process.env.ADMIN_EMAIL || 'your-test-email@gmail.com',
+      from: process.env.EMAIL_USER
+    });
+  } catch (error) {
+    console.error('❌ Email test failed:', error);
+    console.error('Error details:', {
+      code: error.code,
+      command: error.command,
+      response: error.response,
+      responseCode: error.responseCode
+    });
+    
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      code: error.code,
+      details: error.response || 'No additional details',
+      hint: 'Check if EMAIL_USER and EMAIL_PASSWORD are set correctly in Render Environment Variables'
+    });
+  }
+});
+
+// =============================================
+// TEST EMAIL WITH SENDGRID (Alternative)
+// =============================================
+app.get('/api/test-sendgrid', async (req, res) => {
+  try {
+    const nodemailer = require('nodemailer');
+    
+    // Use SendGrid configuration
+    const transporter = nodemailer.createTransport({
+      host: process.env.EMAIL_HOST || 'smtp.sendgrid.net',
+      port: process.env.EMAIL_PORT || 587,
+      secure: false,
+      auth: {
+        user: process.env.EMAIL_USER || 'apikey',
+        pass: process.env.EMAIL_PASSWORD
+      }
+    });
+
+    console.log('📧 Testing SendGrid email...');
+    
+    const info = await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: process.env.ADMIN_EMAIL || 'your-test-email@gmail.com',
+      subject: '✅ SendGrid Test - ' + new Date().toISOString(),
+      html: `
+        <h2>SendGrid is Working!</h2>
+        <p>This test email was sent from your Render deployment using SendGrid.</p>
+        <p><strong>Time:</strong> ${new Date().toISOString()}</p>
+        <p><strong>Service:</strong> partymembersbackendnew</p>
+        <hr>
+        <p>If you received this, your SendGrid configuration is working!</p>
+      `
+    });
+    
+    console.log('✅ SendGrid email sent! MessageID:', info.messageId);
+    
+    res.json({ 
+      success: true, 
+      message: 'SendGrid test email sent successfully!',
+      messageId: info.messageId
+    });
+  } catch (error) {
+    console.error('❌ SendGrid test failed:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      hint: 'Make sure EMAIL_HOST, EMAIL_PORT, EMAIL_USER, and EMAIL_PASSWORD are set correctly'
+    });
+  }
+});
+
 // 404 handler for undefined routes
 app.use((req, res) => {
   res.status(404).json({
@@ -133,6 +251,8 @@ mongoose.connect(process.env.MONGODB_URI, {
     console.log(`📍 API URL: http://localhost:${PORT}/api`);
     console.log(`🌐 CORS enabled for: ${corsOptions.origin.join(', ')}`);
     console.log(`📧 Email notifications: ${process.env.EMAIL_USER ? 'Enabled' : 'Disabled'}`);
+    console.log(`📧 Email service: ${process.env.EMAIL_SERVICE || 'Gmail'}`);
+    console.log(`📧 Test email endpoint: /api/test-email`);
   });
 })
 .catch(err => {
